@@ -1,0 +1,38 @@
+# Offline installation — Windows x64 desktop
+
+## Supported profile
+
+Phase 3 supports native Windows 10/11 x64, the pinned CPython 3.11 runtime, and the packaged Electron desktop application. Linux, macOS, Windows ARM64, general browser automation, voice, messaging bridges, model weights, and external MCP/Honcho services are not included.
+
+## Install
+
+Open native Windows PowerShell in the repository and run:
+
+```powershell
+.\scripts\verify-deps.ps1
+.\scripts\install-offline.ps1
+.\scripts\verify-offline.ps1
+```
+
+The default destination is `%LOCALAPPDATA%\OfflineHermes`. Use `-InstallRoot C:\some\absolute\path` to select another location. An existing destination is not overwritten; `-Force` preserves it as a timestamped sibling backup before replacement.
+
+The installer verifies every vendored byte before mutation, extracts the pinned runtimes, installs Python only from local wheels, primes an isolated npm cache only from local tarballs, runs the desktop workspace with `npm ci --offline --ignore-scripts --legacy-peer-deps`, materializes the reviewed native payloads, and builds an unpacked Electron application. Peer-only optional UI integrations are outside this profile. It never uses an online maintenance command.
+
+Launch with `launch-hermes.cmd`; run the CLI with `hermes-offline.cmd`. Both launchers pin `HERMES_HOME` and force lazy dependency installation, pip indexes, and uv networking off.
+
+## Explicit limitations
+
+The application still needs a configured inference provider. A loopback/LAN provider can be configured from the examples under `config/`; credentials remain user-owned and outside Git. Features excluded from the profile fail as unavailable rather than being downloaded.
+
+Phase 3 verification checks the installed runtime and import surface. Blocking public networking and performing the full desktop smoke test are Phase 4 gates and are not claimed by these scripts.
+
+## Failure behavior
+
+- Missing or changed artifacts stop before installation and name the path.
+- npm runs with `--offline`, audit/funding/update checks disabled, and lifecycle scripts globally suppressed.
+- Python installs use `--no-index --no-deps --no-build-isolation` against the vendored wheel directory.
+- A failed replacement restores the prior installation when `-Force` was used.
+- No script downloads a missing dependency.
+- For the whole install, every child process gets a network guard. `HTTP(S)_PROXY`, npm's proxy settings, and `ELECTRON_MIRROR` point at a closed loopback port, and the Electron and electron-builder caches are redirected to empty per-install directories. Any client that tries to download fails at once, and a host with a pre-populated `%LOCALAPPDATA%\electron\Cache` cannot hide a missing vendored artifact. This is defense in depth and does not replace the Phase 4 firewall test, because clients that ignore proxy variables are not stopped by it.
+- The Electron runtime is materialized into the `electron` package that Node resolves from `apps/desktop`. The builder refuses to start if `electron.exe` is missing, instead of letting upstream's `run-electron-builder.mjs` fall back to `@electron/get`.
+- The Python venv and all pip installs are created after the staging directory moves into place, so console-script launchers never embed a staging path. A failure after the move removes the partial install and restores any `-Force` backup.

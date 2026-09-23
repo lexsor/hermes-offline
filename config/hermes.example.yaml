@@ -1,0 +1,26 @@
+# Example only. Merge into the config.yaml in your offline HERMES_HOME
+# (default %LOCALAPPDATA%\OfflineHermes-home). Keys follow upstream
+# upstream/hermes-agent/cli-config.yaml.example; see it for every option.
+
+model:
+  # "custom" = any OpenAI-compatible endpoint (vLLM, llama.cpp, Ollama...).
+  # LM Studio users can set provider: "lmstudio" instead.
+  provider: "custom"
+  base_url: "http://127.0.0.1:8000/v1"
+  default: "local-model-name"
+
+# Named endpoint with its key read from an environment variable or the .env
+# file in HERMES_HOME. Never put the key itself in a committed file.
+providers:
+  local-openai:
+    base_url: "http://127.0.0.1:8000/v1"
+    key_env: "OPENAI_API_KEY"
+
+# Required offline: passive update checks call api.github.com.
+updates:
+  check: false
+
+telemetry:
+  shared_metrics:
+    enabled: false
+    send: false

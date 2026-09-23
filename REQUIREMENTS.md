@@ -4,7 +4,7 @@
 
 Create a self-contained/offline-capable distribution repository for NousResearch Hermes Agent.
 
-The distribution must allow a fresh supported Linux host to install and verify Hermes without downloading application dependencies from the Internet.
+The first distribution profile must allow a fresh native Windows 10/11 x64 host to install and verify the packaged Hermes Electron desktop application and its local Python backend without downloading application dependencies from the Internet.
 
 ## Scope
 
@@ -24,7 +24,7 @@ Out of scope for the initial version:
 
 - Bundling external local services such as Honcho or arbitrary MCP servers.
 - Bundling user secrets, API keys, provider credentials, private model weights, or private repositories.
-- Guaranteeing support for every operating system before platform requirements are discovered.
+- Supporting Linux, macOS, or Windows ARM64 in the first profile.
 - Rewriting Hermes architecture unless an upstream behavior prevents offline operation and cannot be wrapped.
 
 ## Functional Requirements

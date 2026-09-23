@@ -1,0 +1,25 @@
+# Vendored artifacts are immutable and checksummed byte-for-byte in
+# manifests/checksums.sha256: never convert line endings anywhere under vendor/.
+vendor/** -text
+
+# Archives, wheels, and npm tarballs are stored with Git LFS (the Electron
+# runtime alone exceeds GitHub's 100 MB object limit). An offline machine needs
+# a clone whose LFS objects were fetched before going offline; scripts/verify-deps
+# fails on LFS pointer files because their checksums do not match.
+vendor/**/*.zip    filter=lfs diff=lfs merge=lfs -text
+vendor/**/*.7z     filter=lfs diff=lfs merge=lfs -text
+vendor/**/*.exe    filter=lfs diff=lfs merge=lfs -text
+vendor/**/*.tar.gz filter=lfs diff=lfs merge=lfs -text
+vendor/**/*.tgz    filter=lfs diff=lfs merge=lfs -text
+vendor/**/*.whl    filter=lfs diff=lfs merge=lfs -text
+
+# The upstream snapshot is pinned by tree hash in manifests/upstream.lock.
+# Store and check out its bytes unchanged even with core.autocrlf=true;
+# upstream's own .gitattributes still applies to the patterns it names.
+# Several upstream files are tracked despite upstream's .gitignore, so they
+# were force-added; re-check `git write-tree --prefix=upstream/hermes-agent/`
+# against the lock after any refresh.
+upstream/** -text
+
+# Our POSIX scripts must stay LF even with core.autocrlf=true.
+*.sh text eol=lf

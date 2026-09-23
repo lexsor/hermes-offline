@@ -1,0 +1,8 @@
+servers:
+  example-local-server:
+    enabled: false
+    transport: stdio
+    command: C:\absolute\path\to\already-installed-mcp-server.exe
+    args: []
+
+# Uncached npx, uvx, registry package names, and remote install commands are forbidden.

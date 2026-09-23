@@ -1,16 +1,16 @@
-# Hermes Self-Contained Codex Handoff
+# Offline Hermes distribution
 
-This package is a Codex-ready handoff for building a self-contained, offline-capable distribution of the NousResearch Hermes Agent project.
+This repository builds a self-contained, offline-capable Windows x64 distribution of NousResearch Hermes Agent.
 
 Target upstream:
 
 - Repository: https://github.com/NousResearch/hermes-agent
 - Product name in this handoff: Hermes Agent
-- Desired output: a separate distribution repository that preserves upstream Hermes with minimal source changes while vendoring redistributable dependencies and providing offline bootstrap, install, verification, and update workflows.
+- Supported Phase 3 profile: native Windows 10/11 x64, CPython 3.11, Node 26, and the Electron desktop application.
 
 ## Objective
 
-Create a repository that can be cloned or copied to a fresh supported Linux host and installed without downloading application dependencies from the Internet.
+Allow a clean supported Windows host to install Hermes without downloading application dependencies from the Internet.
 
 The repository should include all redistributable artifacts required to reconstruct the runtime:
 
@@ -25,17 +25,17 @@ The repository should include all redistributable artifacts required to reconstr
 
 The repository should not blindly commit generated runtime directories such as `.venv/`, `node_modules/`, cache directories, local secrets, user config, or machine-specific state.
 
-## How to Use This Handoff
+## Install from local artifacts
 
-Give this folder to Codex as the project brief. Start by asking Codex to complete Phase 1 only.
+From native Windows PowerShell:
 
-Recommended first prompt:
-
-```text
-Use the files in this handoff package as the governing instructions. Start with Phase 1 only: discovery and audit. Do not modify upstream Hermes source during Phase 1. Produce the required dependency, network, licensing, and architecture reports, then stop for review.
+```powershell
+.\scripts\verify-deps.ps1
+.\scripts\install-offline.ps1
+.\scripts\verify-offline.ps1
 ```
 
-After Phase 1 is reviewed, continue phase by phase.
+The default destination is `%LOCALAPPDATA%\OfflineHermes`. See `docs/offline-install.md` for options and explicit profile limitations.
 
 ## Included Files
 
@@ -54,6 +54,8 @@ After Phase 1 is reviewed, continue phase by phase.
 4. Validation: test installation and startup with outbound networking disabled.
 5. Distribution/containerization: package archives and optional container images.
 6. Upstream maintenance: create a controlled update workflow and drift detection.
+
+Phases 1 and 2 are complete. Phase 3 has been run on native Windows 11 x64: install and verification pass after fixing an Electron network fallback, a shared/online `HERMES_HOME` with a live update check, and stale venv paths (see `reports/phase-3-native-windows-run.md`). Phase 4 network-blocked validation on a clean VM has not started.
 
 ## Definition of Done
 

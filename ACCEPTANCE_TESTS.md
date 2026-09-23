@@ -8,11 +8,11 @@ The final repository is accepted only after installation and verification pass i
 
 ## Required Test Environments
 
-At minimum, test on one supported Linux target chosen during discovery.
+At minimum, test on a clean native Windows 10/11 x64 target with CPython 3.11 compatibility, as approved during discovery.
 
 Recommended:
 
-- clean container or VM
+- clean Windows x64 VM
 - no pre-existing Python virtual environment
 - no pre-existing Node dependencies
 - no global package-manager cache relied upon
@@ -39,11 +39,9 @@ Pass criteria:
 - `reports/redistribution-exceptions.md` lists every non-vendored required or optional artifact.
 - Running checksum verification succeeds.
 
-Suggested command:
+Windows requirement:
 
-```bash
-scripts/verify-deps.sh
-```
+Phase 3 must provide a native Windows entry point (PowerShell) in addition to the required cross-platform verification script named in `AGENTS.md`.
 
 Expected result:
 
@@ -61,11 +59,9 @@ Pass criteria:
 - No secrets are required in Git.
 - External services are configured through examples and health checks.
 
-Suggested command:
+Windows requirement:
 
-```bash
-scripts/install-offline.sh --config config/hermes.example.yaml
-```
+Phase 3 must provide a native Windows offline installer entry point (PowerShell) and retain the required script names from `AGENTS.md` where applicable.
 
 Expected result:
 
@@ -86,13 +82,9 @@ Pass criteria:
 - Hermes smoke test starts successfully.
 - Any configured external local services are checked through local endpoints only.
 
-Suggested validation sequence:
+Windows requirement:
 
-```bash
-scripts/verify-offline.sh
-scripts/install-offline.sh --offline-required
-tests/smoke/run-smoke-test.sh
-```
+The Phase 4 sequence must be executable from native Windows PowerShell and must run with public outbound networking blocked.
 
 Network assertions:
 

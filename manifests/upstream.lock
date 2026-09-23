@@ -1,0 +1,12 @@
+format = 1
+repository = "https://github.com/NousResearch/hermes-agent.git"
+commit = "bc655bfb40ff7414bbec9dd179b17cf41e2f60ba"
+tree = "8196c19ca3510d2bd1297c41c72059742379780d"
+commit_date = "2026-09-21T14:41:52Z"
+imported_at = "2026-09-21T15:28:47Z"
+import_mode = "committed-tree"
+vcs_metadata = "not committed; upstream .git kept outside this repository"
+path = "upstream/hermes-agent"
+submodules = "none"
+patches = "none"
+

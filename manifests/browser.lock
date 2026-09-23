@@ -1,0 +1,17 @@
+format_version = 1
+profile = "windows-x64-desktop"
+generated = "2026-09-21"
+artifact_count = 1
+general_browser_automation_included = false
+
+[[artifact]]
+name = "electron"
+version = "40.10.2"
+platform = "win32-x64"
+source_url = "https://github.com/electron/electron/releases/download/v40.10.2/electron-v40.10.2-win32-x64.zip"
+path = "vendor/browser/windows-x64/electron-v40.10.2-win32-x64.zip"
+sha256 = "25ea6cfdc06deba58dafa6a3fc1fbd6dcda9e06a14035150ee1d9f73bca2e651"
+license = "MIT plus Chromium and bundled third-party notices"
+redistribution = "redistributable_with_embedded_notices"
+purpose = "Required packaged desktop runtime; not the optional Hermes browser-automation feature"
+consumed_by = "Phase 3 Electron postinstall cache/desktop packaging"

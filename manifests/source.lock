@@ -1,0 +1,40 @@
+format_version = 1
+profile = "windows-x64-desktop"
+generated = "2026-09-21"
+artifact_count = 3
+
+[[artifact]]
+name = "git-for-windows-source"
+version = "2.54.0.windows.1"
+platform = "source"
+source_url = "https://codeload.github.com/git-for-windows/git/tar.gz/refs/tags/v2.54.0.windows.1"
+path = "vendor/source/windows-x64/git-for-windows-v2.54.0.windows.1.tar.gz"
+sha256 = "f3e6edd575a882d8b11d37b0464d9e2fb4772feca7e27a8ec4d66c64e8790adf"
+license = "GPL-2.0-only plus bundled component licenses"
+redistribution = "source_corresponding_to_portable_git"
+purpose = "Corresponding source for the bundled PortableGit runtime"
+consumed_by = "Redistribution compliance/source offer"
+
+[[artifact]]
+name = "lightningcss-source"
+version = "1.32.0"
+platform = "source"
+source_url = "https://codeload.github.com/parcel-bundler/lightningcss/tar.gz/refs/tags/v1.32.0"
+path = "vendor/source/windows-x64/lightningcss-v1.32.0.tar.gz"
+sha256 = "ca67b9ba532d439f5f91d23debfc2543d6decac130ee88bc4c66202fc7173ad9"
+license = "MPL-2.0"
+redistribution = "source_corresponding_to_lightningcss"
+purpose = "Corresponding source for Lightning CSS 1.32.0 and its Windows x64 native npm artifact"
+consumed_by = "Redistribution compliance/source availability"
+
+[[artifact]]
+name = "lightningcss-source"
+version = "1.33.0"
+platform = "source"
+source_url = "https://codeload.github.com/parcel-bundler/lightningcss/tar.gz/refs/tags/v1.33.0"
+path = "vendor/source/windows-x64/lightningcss-v1.33.0.tar.gz"
+sha256 = "3197aa5188b66d0d1e5026cbc8b65c4c0c53fdc949f9ed497fe75df2d13f722a"
+license = "MPL-2.0"
+redistribution = "source_corresponding_to_lightningcss"
+purpose = "Corresponding source for Lightning CSS 1.33.0"
+consumed_by = "Redistribution compliance/source availability"

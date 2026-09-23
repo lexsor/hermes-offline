@@ -1,0 +1,9 @@
+# Phase 3 generated output; immutable inputs remain under vendor/.
+/dist/
+*.staging-*
+*.previous-*
+
+# Secrets and user-owned configuration.
+.env
+config/*.local.*
+config/secrets.*
