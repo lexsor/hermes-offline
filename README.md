@@ -1,62 +1,120 @@
-# Offline Hermes distribution
+# Offline Hermes
 
-This repository builds a self-contained, offline-capable Windows x64 distribution of NousResearch Hermes Agent.
+A self-contained, offline-installable Windows x64 distribution of [NousResearch Hermes Agent](https://github.com/NousResearch/hermes-agent): the CLI, the Python backend, and the Electron desktop app.
 
-Target upstream:
+Every dependency needed to install it ships in this repository as a pinned, checksummed artifact. The installer uses only those artifacts. A missing or altered file stops the install with an error that names it, and nothing is ever downloaded as a fallback.
 
-- Repository: https://github.com/NousResearch/hermes-agent
-- Product name in this handoff: Hermes Agent
-- Supported Phase 3 profile: native Windows 10/11 x64, CPython 3.11, Node 26, and the Electron desktop application.
+| | |
+|---|---|
+| Upstream | `NousResearch/hermes-agent` at `bc655bf` (Hermes Agent v0.21.3), unmodified; see [`manifests/upstream.lock`](manifests/upstream.lock) |
+| Profile | `windows-x64-desktop`: Windows 10/11 x64, CPython 3.11.16, Node 26.9.0, Electron 40.10.2 |
+| Vendored | 1,110 checksummed files: 68 Python wheels, 1,027 npm tarballs, 10 runtime/tool binaries, the Electron runtime, 3 source archives |
+| Host requirement | Windows PowerShell 5.1, which ships with Windows. Nothing else. |
 
-## Objective
+## Status
 
-Allow a clean supported Windows host to install Hermes without downloading application dependencies from the Internet.
+| Phase | State |
+|---|---|
+| 1. Discovery | Done. Reports in [`reports/`](reports/) |
+| 2. Vendoring | Done. Artifacts in `vendor/`, manifests in `manifests/` |
+| 3. Offline installer | Done, and run on native Windows 11 x64 under both Windows PowerShell 5.1 and PowerShell 7. See [`reports/phase-3-native-windows-run.md`](reports/phase-3-native-windows-run.md) |
+| 4. Network-blocked validation | Harness built and dry-run on a connected host. **The clean, network-blocked run has not been done yet.** See [`docs/phase-4-validation-plan.md`](docs/phase-4-validation-plan.md) |
+| 5. Distribution | Not started |
+| 6. Upstream maintenance | Not started |
 
-The repository should include all redistributable artifacts required to reconstruct the runtime:
+Offline support is **not yet proven**. That claim waits for the Phase 4 run on a clean machine with outbound networking blocked.
 
-- Python wheels and source distributions
-- Node package tarballs or offline package cache
-- External binaries such as ripgrep and ffmpeg, where redistributable
-- Browser/runtime artifacts such as Playwright/Chromium, where required and redistributable
-- Source archives for dependencies that cannot be represented as normal package artifacts
-- Lockfiles, checksums, manifests, and license metadata
-- Offline bootstrap/install/verification scripts
-- A controlled upstream-update workflow
+## Getting the repository onto an offline machine
 
-The repository should not blindly commit generated runtime directories such as `.venv/`, `node_modules/`, cache directories, local secrets, user config, or machine-specific state.
-
-## Install from local artifacts
-
-From native Windows PowerShell:
+The vendored archives are stored with **Git LFS**. On a connected machine:
 
 ```powershell
-.\scripts\verify-deps.ps1
-.\scripts\install-offline.ps1
-.\scripts\verify-offline.ps1
+git clone https://github.com/lexsor/hermes-offline.git
+cd hermes-offline
+git lfs pull
+powershell -ExecutionPolicy Bypass -File .\scripts\verify-deps.ps1   # must report: Verified 1110 vendored files
 ```
 
-The default destination is `%LOCALAPPDATA%\OfflineHermes`. See `docs/offline-install.md` for options and explicit profile limitations.
+If `verify-deps` reports checksum mismatches, the LFS content was not downloaded (the files are still pointer stubs). Run `git lfs pull` again.
 
-## Included Files
+Then copy the working tree to the offline machine. `.git` is not needed there. `tests\phase4\New-Phase4Vm.ps1 -Stage Export` produces a verified tar of exactly the files required.
 
-- `AGENTS.md`: operating instructions and guardrails for Codex
-- `REQUIREMENTS.md`: functional and non-functional requirements
-- `ARCHITECTURE.md`: suggested distribution architecture and directory layout
-- `ACCEPTANCE_TESTS.md`: acceptance criteria and offline validation tests
-- `SECURITY.md`: secret handling, supply-chain, checksum, and network controls
-- `REPOSITORY_STRUCTURE.md`: suggested final repository tree
+## Install
 
-## Phase Summary
+From Windows PowerShell on the target machine, in the repository root:
 
-1. Discovery: audit Hermes and produce reports; no upstream source modifications.
-2. Vendoring: collect redistributable dependency artifacts and generate manifests.
-3. Offline installer: create local-only bootstrap/install scripts with fail-fast behavior.
-4. Validation: test installation and startup with outbound networking disabled.
-5. Distribution/containerization: package archives and optional container images.
-6. Upstream maintenance: create a controlled update workflow and drift detection.
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\verify-deps.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\install-offline.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\verify-offline.ps1
+```
 
-Phases 1 and 2 are complete. Phase 3 has been run on native Windows 11 x64: install and verification pass after fixing an Electron network fallback, a shared/online `HERMES_HOME` with a live update check, and stale venv paths (see `reports/phase-3-native-windows-run.md`). Phase 4 network-blocked validation on a clean VM has not started.
+The install takes about 15–20 minutes. Most of that is the local Electron desktop build.
 
-## Definition of Done
+| Location | Contents |
+|---|---|
+| `%LOCALAPPDATA%\OfflineHermes` | The install: runtimes, venv, desktop app, launchers. Change it with `-InstallRoot`; `-Force` replaces an existing install, keeping a backup. |
+| `%LOCALAPPDATA%\OfflineHermes-home` | Your Hermes settings and data (`HERMES_HOME`). Change it with `-HermesHome`. It is never overwritten by a reinstall and is kept separate from any online Hermes install. |
 
-The work is complete only when a fresh supported host can install and verify Hermes from the self-contained repository with outbound network access disabled, and any non-vendored exception is documented with a clear reason, owner action, and failure mode.
+Launch with `launch-hermes.cmd` (desktop) or `hermes-offline.cmd` (CLI) from the install folder. Always use these launchers. They pin the offline Hermes home and runtimes, and keep lazy installs and update checks off.
+
+Hermes still needs an inference provider. Point it at a local or LAN OpenAI-compatible server using the examples in [`config/`](config/); see [`docs/configuration.md`](docs/configuration.md). Options, failure behavior and profile limits are in [`docs/offline-install.md`](docs/offline-install.md).
+
+## Not included
+
+These are out of the first profile:
+
+- Linux, macOS and Windows ARM64
+- general browser automation (Playwright/agent-browser)
+- voice
+- messaging bridges
+- model weights
+- Honcho and MCP servers, which are configured as external services
+
+Features outside the profile report as unavailable instead of being downloaded. Every non-vendored item is listed in [`reports/redistribution-exceptions.md`](reports/redistribution-exceptions.md).
+
+## Known issues
+
+- **Opening `app\Hermes.exe` directly** (instead of `launch-hermes.cmd`) will probably fall back to upstream's networked first-run installer, or attach to another Hermes install on the machine. Phase 4 case T8 tests this.
+- **`scripts\build-bundle.ps1`** zips an installed tree whose paths are fixed to a temporary folder, so the archive does not work anywhere else yet. A Phase 5 fix.
+- **Redistribution:** a human legal review is required before public redistribution; see [`reports/license-redistribution-review.md`](reports/license-redistribution-review.md) and the policy in [`manifests/licenses.lock`](manifests/licenses.lock).
+
+## Testing
+
+```bash
+bash tests/phase3/static-checks.sh    # installer invariants (needs ripgrep)
+bash tests/phase4/static-checks.sh    # harness invariants and PowerShell 5.1 compatibility
+```
+
+For the Phase 4 network-blocked validation:
+
+- On an **Azure VM**, follow [`docs/phase-4-azure-runbook.md`](docs/phase-4-azure-runbook.md).
+- On **Hyper-V**, see [`tests/phase4/README.md`](tests/phase4/README.md), which uses `New-Phase4Vm.ps1`.
+- The test cases and pass criteria are in [`docs/phase-4-validation-plan.md`](docs/phase-4-validation-plan.md).
+
+## Repository layout
+
+```
+upstream/hermes-agent/  pristine upstream snapshot (tree hash pinned in manifests/upstream.lock)
+vendor/                 immutable artifacts: python/, node/, binaries/, browser/, source/ (Git LFS)
+manifests/              per-kind locks, licenses.lock, checksums.sha256 (the install-time source of truth)
+scripts/                verify-deps, install-offline, verify-offline, bootstrap, build-bundle (.ps1, plus .sh shims)
+config/                 example Hermes, provider, Honcho and MCP configuration (no secrets)
+docs/                   install, configuration, and Phase 4 plan and runbook
+reports/                Phase 1 discovery reports and Phase 3 run results
+tests/phase3/           installer static checks
+tests/phase4/           network-blocked validation harness
+```
+
+The project's governing documents:
+
+- [`AGENTS.md`](AGENTS.md): phases and guardrails
+- [`REQUIREMENTS.md`](REQUIREMENTS.md)
+- [`ARCHITECTURE.md`](ARCHITECTURE.md)
+- [`ACCEPTANCE_TESTS.md`](ACCEPTANCE_TESTS.md)
+- [`SECURITY.md`](SECURITY.md)
+- [`REPOSITORY_STRUCTURE.md`](REPOSITORY_STRUCTURE.md)
+
+## Definition of done
+
+The project is complete only when a fresh supported machine can install and verify Hermes from this repository with outbound networking disabled, every non-vendored exception is documented with a reason, owner action and failure mode, and the upstream update workflow (Phase 6) exists and has been tested.
