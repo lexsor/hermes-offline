@@ -1,6 +1,6 @@
 # Phase 4 plan: network-blocked validation
 
-Status: harness built (`tests/phase4/`, see its README). Dry-run on a connected, non-clean host: P0 (expect-open), T1, T2, T3, T5, T6 and T11 pass. The firewall scripts were not executed there by design. The network-blocked VM run has not started. Baseline: commit `a3567b8` (Phase 3 passing on a connected Windows 11 host; see `reports/phase-3-native-windows-run.md`).
+Status: harness built (`tests/phase4/`, see its README), including `New-Phase4Vm.ps1` for building the Hyper-V VM. Dry run on a connected, non-clean host passes P0 (expect-open), T1, T2, T3, T5, T6 and T11 under both Windows PowerShell 5.1 and PowerShell 7. The offline install also passes under 5.1. The firewall scripts and the Hyper-V stages of `New-Phase4Vm.ps1` were not executed on that host, by design; only its `Export` stage was. The network-blocked VM run has not started. Baseline: commit `a3567b8` (Phase 3 passing on a connected Windows 11 host; see `reports/phase-3-native-windows-run.md`).
 
 Resolved during harness development: T6's mock provider config works with both `providers.<name>.api` and `providers.<name>.base_url`, so `config/hermes.example.yaml` needs no change. The CLI honors `OFFLINE_HERMES_HOME` through the launcher.
 

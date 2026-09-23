@@ -135,7 +135,8 @@ function Start-ProcessSampler {
         [Parameter()][int]$IntervalMilliseconds = 500
     )
     '"pid","name","path","command_line","first_seen"' | Set-Content -LiteralPath $OutputCsv -Encoding utf8
-    return Start-ThreadJob -ArgumentList $OutputCsv, $IntervalMilliseconds -ScriptBlock {
+    # Start-Job (not the PowerShell 7 thread-job cmdlet): a clean guest has only Windows PowerShell 5.1.
+    return Start-Job -ArgumentList $OutputCsv, $IntervalMilliseconds -ScriptBlock {
         param($csv, $interval)
         $seen = [System.Collections.Generic.HashSet[string]]::new()
         while ($true) {

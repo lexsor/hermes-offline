@@ -362,7 +362,7 @@ catch {
         Move-Item -LiteralPath $backupRoot -Destination $installPath
         Write-Warning "Installation failed; restored the prior installation at $installPath."
     }
-    Write-Error $_
+    Write-OfflineHermesFailure $_
     exit 1
 }
 finally {

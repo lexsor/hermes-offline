@@ -16,6 +16,14 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'Phase4.psm1') -Force
 
+# `powershell -File ... -Cases P0,T1` delivers one comma-joined string.
+$Cases = @($Cases | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim().ToUpperInvariant() } | Where-Object { $_ })
+$knownCases = @('P0', 'T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T11')
+$unknown = @($Cases | Where-Object { $knownCases -notcontains $_ })
+if ($unknown.Count -gt 0) {
+    throw "Unknown or manual-only case(s): $($unknown -join ', '). Automated cases: $($knownCases -join ', '). T7-T10 and T12 are in desktop-checklist.md."
+}
+
 $repoRoot = Get-Phase4RepoRoot
 $runId = 'phase4-' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss') + $(if ($DryRunOnConnectedHost) { '-dryrun' } else { '' })
 $evidence = New-EvidenceDirectory -Root $EvidenceRoot -RunId $runId
@@ -155,11 +163,13 @@ try {
                     $ok = $true
                     foreach ($pair in @(@('verify-deps', $verify), @('install-offline', $install))) {
                         $name, $run = $pair
-                        $mentions = $run.Text -match $namePattern -and $run.Text -match $ExpectText
+                        # Collapse whitespace so console wrapping cannot split a phrase.
+                        $flat = $run.Text -replace '\s+', ' '
+                        $mentions = $flat -match $namePattern -and $flat -match $ExpectText
                         $notes.Add("${Label} ${name}: exit $($run.ExitCode); names artifact and '$ExpectText': $mentions")
                         if ($run.ExitCode -eq 0 -or -not $mentions) { $ok = $false }
                     }
-                    if ($install.Text -notmatch 'manifests/checksums\.sha256' -and $Mutation -eq 'remove') {
+                    if (($install.Text -replace '\s+', ' ') -notmatch 'manifests/checksums\.sha256' -and $Mutation -eq 'remove') {
                         $notes.Add("$Label install error does not name the manifest"); $ok = $false
                     }
                     foreach ($path in @($scratchInstall, "$scratchInstall-home")) {
@@ -303,4 +313,8 @@ Set-Content -LiteralPath (Join-Path $evidence 'summary.md') -Value $lines -Encod
 
 Write-Host "`nEvidence: $evidence"
 Write-Host "$($results.Count - $failed.Count)/$($results.Count) cases passed."
+if ($results.Count -ne $Cases.Count) {
+    Write-Host "FAIL: $($Cases.Count) case(s) requested but $($results.Count) ran." -ForegroundColor Red
+    exit 1
+}
 if ($failed.Count -gt 0) { exit 1 }

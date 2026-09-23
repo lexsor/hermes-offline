@@ -78,6 +78,6 @@ try {
     Write-Host 'Note: public-network blocking and the live desktop smoke test remain Phase 4 validation gates.'
 }
 catch {
-    Write-Error $_
+    Write-OfflineHermesFailure $_
     exit 1
 }

@@ -43,14 +43,13 @@ foreach ($resolver in $targets.PublicResolvers) {
 }
 
 foreach ($url in $targets.HttpsUrls) {
-    try {
-        $response = Invoke-WebRequest -Uri $url -Method Head -TimeoutSec $TimeoutSeconds -MaximumRedirection 0 -SkipHttpErrorCheck -ErrorAction Stop
-        # Any HTTP status means a TCP+TLS session to the public host succeeded.
-        Add-ProbeResult 'https' $url $true "HTTP $([int]$response.StatusCode)"
-    }
-    catch {
-        Add-ProbeResult 'https' $url $false $_.Exception.Message
-    }
+    # A TCP connection to the registry's HTTPS port (resolved through system
+    # DNS) is what an installer would need. Testing the connection rather than
+    # an HTTP request cannot under-report: Windows PowerShell 5.1's web stack
+    # can fail the TLS handshake on an OPEN network and look "blocked".
+    $uri = [Uri]$url
+    $outcome = Test-TcpConnect -HostName $uri.Host -Port 443 -TimeoutMilliseconds ($TimeoutSeconds * 1000)
+    Add-ProbeResult 'https-tcp' "$($uri.Host):443" ($outcome -eq 'connected') $outcome
 }
 
 foreach ($endpoint in $targets.TcpEndpoints) {

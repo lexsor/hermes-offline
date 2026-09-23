@@ -21,6 +21,7 @@ required=(
   Start-MockProvider.ps1
   mock-provider.mjs
   Invoke-Phase4.ps1
+  New-Phase4Vm.ps1
   desktop-checklist.md
 )
 for relative in "${required[@]}"; do
@@ -42,12 +43,28 @@ rg -q 'Test-IsVirtualMachine' "$harness/Enable-NetworkBlock.ps1"
 rg -q 'Test-IsAdministrator' "$harness/Enable-NetworkBlock.ps1"
 rg -q 'advfirewall export' "$harness/Enable-NetworkBlock.ps1"
 rg -q 'advfirewall import' "$harness/Disable-NetworkBlock.ps1"
+# The VM must never be staged while connected.
+rg -q 'SwitchType Private' "$harness/New-Phase4Vm.ps1"
+rg -q 'non-isolated switch' "$harness/New-Phase4Vm.ps1"
 
-pwsh_bin="$(command -v pwsh || command -v pwsh.exe || true)"
+# A clean guest has only Windows PowerShell 5.1: forbid PowerShell 7-only
+# features and non-ASCII (5.1 reads BOM-less scripts as ANSI).
+if rg -n -e 'Start-ThreadJob|SkipHttpErrorCheck|ForEach-Object -Parallel|AsHashtable|SkipCertificateCheck' \
+     --glob '*.ps1' --glob '*.psm1' "$harness" "$repo_root/scripts"; then
+  echo 'PowerShell 7-only feature used; the offline target has Windows PowerShell 5.1.' >&2
+  exit 1
+fi
+if rg -n '[^\x00-\x7F]' --glob '*.ps1' --glob '*.psm1' "$harness" "$repo_root/scripts"; then
+  echo 'Non-ASCII character in a PowerShell file (Windows PowerShell 5.1 would misread it).' >&2
+  exit 1
+fi
+
+# Parse with Windows PowerShell 5.1 when present (the target engine), else pwsh.
+pwsh_bin="$(command -v powershell.exe || command -v pwsh || command -v pwsh.exe || true)"
 if [[ -n "$pwsh_bin" ]]; then
   PHASE4_HARNESS="$(cygpath -w "$harness" 2>/dev/null || echo "$harness")" "$pwsh_bin" -NoLogo -NoProfile -Command '
     $bad = 0
-    foreach ($f in Get-ChildItem -LiteralPath $env:PHASE4_HARNESS -Include *.ps1,*.psm1 -Recurse) {
+    foreach ($f in Get-ChildItem -LiteralPath $env:PHASE4_HARNESS -Recurse -File | Where-Object { $_.Extension -in ".ps1", ".psm1" }) {
       $errors = $null
       [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$errors) | Out-Null
       foreach ($e in $errors) { Write-Host "$($f.Name):$($e.Extent.StartLineNumber): $($e.Message)"; $bad++ }

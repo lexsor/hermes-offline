@@ -33,6 +33,23 @@ This was the first execution of the Phase 3 scripts on native Windows. The scrip
    - `build-bundle.ps1` uses a temporary Hermes home, so building a bundle never touches the user's home.
    - `static-checks.sh` gained regression guards for defects 1–3. It now fails if `rg` is missing, because its negative `if rg …` checks would otherwise pass vacuously. The regex also avoids `\\`, which Git Bash collapses; the guard was confirmed to match the original faulty line.
 
+## Windows PowerShell 5.1
+
+A clean Windows target has only Windows PowerShell 5.1 (PowerShell 7 is not vendored), while the runs above used PowerShell 7.6. Rerun on 2026-09-23 with `powershell.exe` 5.1.26100:
+
+| Step | Result |
+|---|---|
+| All `scripts/` and `tests/phase4/` files parsed by the 5.1 parser | Pass |
+| `install-offline.ps1` under 5.1 | Pass, 18 min (the repository export ran concurrently). The vendored Electron dist was used, with no download fallback |
+| `verify-offline.ps1` under 5.1 | Pass |
+| Phase 4 harness dry run (P0–T6, T11) under 5.1 and under 7 | 8/8 each |
+
+Fixed along the way:
+- The harness used 7-only features: `-SkipHttpErrorCheck`, and `Start-ThreadJob`, now replaced by `Start-Job`. The HTTPS probes now test a TCP connection to `<host>:443`, because 5.1's web stack can fail the TLS handshake on an open network and falsely report "blocked".
+- `Write-Error` under 5.1 wrapped failure messages mid-phrase, splitting "Checksum mismatch" across lines. `install-offline`, `verify-deps` and `verify-offline` now print a plain `ERROR: <message>` line on stderr. That new failure path was exercised by T2/T3 under both engines. The success path is unchanged since the full 5.1 install.
+- `Get-ChildItem -LiteralPath … -Include` is ignored by 5.1; the static check's parse step now filters by extension.
+- `static-checks.sh` now rejects 7-only features and non-ASCII characters in PowerShell files (5.1 reads BOM-less scripts as ANSI), and parses with `powershell.exe` when present.
+
 ## Open items for Phase 4/5
 
 - **Blocked-network validation is still required.** The guard only stops clients that honor proxy variables. Phase 4 must run on a clean Windows x64 VM with outbound traffic blocked by firewall, and with no `%LOCALAPPDATA%\electron`, npm or pip caches. This host's pre-populated Electron cache is exactly what hid defect 1.

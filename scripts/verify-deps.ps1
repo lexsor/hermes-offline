@@ -16,6 +16,6 @@ try {
     Write-Host 'Dependency verification passed.'
 }
 catch {
-    Write-Error $_
+    Write-OfflineHermesFailure $_
     exit 1
 }

@@ -209,6 +209,14 @@ function Invoke-WithEnvironment {
     }
 }
 
+function Write-OfflineHermesFailure {
+    # Print the failure message verbatim on stderr. Write-Error under Windows
+    # PowerShell 5.1 prefixes the script path and wraps at the console width,
+    # which can split the artifact name the user needs to see.
+    param([Parameter(Mandatory)]$ErrorRecord)
+    [Console]::Error.WriteLine("ERROR: $($ErrorRecord.Exception.Message)")
+}
+
 Export-ModuleMember -Function @(
     'Assert-NativeWindowsX64',
     'Copy-DirectoryContents',
@@ -219,5 +227,6 @@ Export-ModuleMember -Function @(
     'Invoke-CheckedCommand',
     'Invoke-WithEnvironment',
     'Resolve-NodePackageDirectory',
-    'Test-VendoredArtifacts'
+    'Test-VendoredArtifacts',
+    'Write-OfflineHermesFailure'
 )
