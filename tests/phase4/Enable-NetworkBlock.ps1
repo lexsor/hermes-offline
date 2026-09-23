@@ -27,6 +27,16 @@ if (-not (Test-IsVirtualMachine) -and -not $AllowPhysicalHost) {
     throw "This machine does not look like a VM (model '$model'). The Phase 4 harness is designed for a disposable VM; pass -AllowPhysicalHost only on a dedicated test machine."
 }
 
+# On a cloud VM the admin reaches the machine over RDP. Removing the default
+# route stops RDP replies from reaching the client and locks the operator out.
+$isAzure = (Test-Path -LiteralPath 'C:\WindowsAzure') -or [bool](Get-Service -Name 'WindowsAzureGuestAgent' -ErrorAction SilentlyContinue)
+if ($isAzure -and $AlsoRemoveRoutesAndDns) {
+    throw 'Refusing -AlsoRemoveRoutesAndDns on an Azure VM: removing the default route would drop your RDP session. Use an NSG outbound deny rule as the outer layer instead (see docs/phase-4-azure-runbook.md).'
+}
+if ($isAzure) {
+    Write-Warning 'Azure VM detected. Keep this RDP session open, and make sure Serial Console is enabled for recovery. Azure Run Command will stop working while the block is on, because the guest agent cannot reach 168.63.129.16.'
+}
+
 $statePath = Join-Path $StateDirectory 'state.json'
 if (Test-Path -LiteralPath $statePath) {
     throw "A network block is already recorded at $statePath. Run Disable-NetworkBlock.ps1 first."
