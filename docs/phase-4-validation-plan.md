@@ -1,6 +1,10 @@
 # Phase 4 plan: network-blocked validation
 
-Status: plan, not started. Baseline: commit `a3567b8` (Phase 3 passing on a connected Windows 11 host; see `reports/phase-3-native-windows-run.md`).
+Status: harness built (`tests/phase4/`, see its README). Dry-run on a connected, non-clean host: P0 (expect-open), T1, T2, T3, T5, T6 and T11 pass. The firewall scripts were not executed there by design. The network-blocked VM run has not started. Baseline: commit `a3567b8` (Phase 3 passing on a connected Windows 11 host; see `reports/phase-3-native-windows-run.md`).
+
+Resolved during harness development: T6's mock provider config works with both `providers.<name>.api` and `providers.<name>.base_url`, so `config/hermes.example.yaml` needs no change. The CLI honors `OFFLINE_HERMES_HOME` through the launcher.
+
+New risk found: on a host where a user-level `HERMES_HOME` is set (as on the development host), `Hermes.exe` opened directly (T8) would attach to *that* home's install rather than the offline one. The launcher always overrides it.
 
 ## Goal
 

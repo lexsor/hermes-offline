@@ -7,3 +7,8 @@
 .env
 config/*.local.*
 config/secrets.*
+
+# Phase 4 raw run evidence (firewall/DNS logs, process listings, transcripts).
+# Review it, then summarize into reports/; do not commit it wholesale.
+/phase4-evidence/
+/reports/evidence/
