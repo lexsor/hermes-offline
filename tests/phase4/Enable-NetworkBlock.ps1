@@ -79,8 +79,10 @@ try {
     New-NetFirewallRule -DisplayName "$ruleGroup - block non-loopback outbound" -Group $ruleGroup `
         -Direction Outbound -Action Block -Profile Any `
         -RemoteAddress @('0.0.0.0-126.255.255.255', '128.0.0.0-255.255.255.255', '::2-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff') | Out-Null
-    New-NetFirewallRule -DisplayName "$ruleGroup - allow loopback outbound" -Group $ruleGroup `
-        -Direction Outbound -Action Allow -Profile Any -RemoteAddress @('127.0.0.0/8', '::1') | Out-Null
+    # Loopback needs no allow rule: Windows Firewall does not filter loopback
+    # traffic, New-NetFirewallRule rejects loopback addresses, and the block
+    # rule above excludes 127.0.0.0/8 and ::1. Assert-NetworkBlocked.ps1
+    # verifies that loopback still connects.
 
     # 5. Optional second layer.
     if ($AlsoRemoveRoutesAndDns) {
@@ -100,9 +102,16 @@ try {
         }
     }
 }
-finally {
+catch {
+    # Never leave a half-applied block behind: restore the exported policy
+    # (and any routes/DNS already changed), then report the original error.
     Write-EvidenceJson -Path $statePath -InputObject $state
+    $failure = $_
+    Write-Warning "Enabling the network block failed; rolling back. Cause: $($failure.Exception.Message)"
+    & (Join-Path $PSScriptRoot 'Disable-NetworkBlock.ps1') -StateDirectory $StateDirectory
+    throw $failure
 }
+Write-EvidenceJson -Path $statePath -InputObject $state
 
 # 6. Start evidence logs clean. The firewall log is filtered by enabled_at
 #    because the firewall service keeps pfirewall.log open.

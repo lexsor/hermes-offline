@@ -43,6 +43,14 @@ rg -q 'Test-IsVirtualMachine' "$harness/Enable-NetworkBlock.ps1"
 rg -q 'Test-IsAdministrator' "$harness/Enable-NetworkBlock.ps1"
 rg -q 'advfirewall export' "$harness/Enable-NetworkBlock.ps1"
 rg -q 'advfirewall import' "$harness/Disable-NetworkBlock.ps1"
+# New-NetFirewallRule rejects loopback addresses (found on the first Azure
+# run), and a failed enable must roll itself back.
+if rg -n "RemoteAddress[^#]*('127\.|'::1')" "$harness/Enable-NetworkBlock.ps1"; then
+  echo 'Enable-NetworkBlock.ps1 passes a loopback address to a firewall rule; Windows rejects it.' >&2
+  exit 1
+fi
+rg -q 'Disable-NetworkBlock.ps1' "$harness/Enable-NetworkBlock.ps1"
+
 # The VM must never be staged while connected.
 rg -q 'SwitchType Private' "$harness/New-Phase4Vm.ps1"
 rg -q 'non-isolated switch' "$harness/New-Phase4Vm.ps1"
