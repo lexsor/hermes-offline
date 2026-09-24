@@ -56,9 +56,11 @@ foreach ($log in $processLogs) {
     # (the Azure rerun misattributed Edge WebView lookups made 12 minutes after
     # sampling ended to an exited Hermes python.exe).
     $sampledUntil = ($entries | Measure-Object -Property start -Maximum).Maximum
+    $sampledFrom = ($entries | Measure-Object -Property start -Minimum).Minimum
     foreach ($entry in $entries) {
         if ($entry.pid -eq '-1') { continue }   # sampler heartbeat
         $entry.sampledUntil = $sampledUntil
+        $entry | Add-Member -NotePropertyName sampledFrom -NotePropertyValue $sampledFrom
         if (-not $processTimeline.ContainsKey($entry.pid)) {
             $processTimeline[$entry.pid] = [System.Collections.Generic.List[object]]::new()
         }
@@ -73,17 +75,23 @@ function Resolve-ProcessOwner {
     param([string]$ProcessId, [datetime]$When)
     if (-not $ProcessId -or $ProcessId -eq '-') { return 'unknown' }
     if (-not $processTimeline.ContainsKey($ProcessId)) { return "pid $ProcessId (never sampled)" }
-    $owner = $null
     # The sampler polls every 500 ms; a process can connect before it is seen.
     $cutoff = $When.AddSeconds(2)
+    # Only a log that was sampling at $When can name the owner. With several
+    # logs (automated run + manual cases) a long-running process appears in
+    # each; judging by the most recent sighting alone wrongly treated events
+    # after the automated sampler stopped as unattributable even though the
+    # manual sampler was still covering them (Azure run 3).
+    $owner = $null
+    $lastSeen = $null
     foreach ($entry in $processTimeline[$ProcessId]) {
-        if ($entry.start -le $cutoff) { $owner = $entry } else { break }
+        if ($entry.start -gt $cutoff) { break }
+        $lastSeen = $entry
+        if ($When -ge $entry.sampledFrom.AddSeconds(-2) -and $When -le $entry.sampledUntil.AddSeconds(5)) { $owner = $entry }
     }
-    if (-not $owner) { return "pid $ProcessId (not yet sampled)" }
-    if ($When -gt $owner.sampledUntil.AddSeconds(5)) {
-        return "pid $ProcessId (after sampling ended; last seen as $($owner.image))"
-    }
-    return $owner.image
+    if ($owner) { return $owner.image }
+    if ($lastSeen) { return "pid $ProcessId (after sampling ended; last seen as $($lastSeen.image))" }
+    return "pid $ProcessId (not yet sampled)"
 }
 
 $testRoots = @(
