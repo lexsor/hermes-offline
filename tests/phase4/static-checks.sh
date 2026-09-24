@@ -62,6 +62,12 @@ if rg -n -e 'Start-ThreadJob|SkipHttpErrorCheck|ForEach-Object -Parallel|AsHasht
   echo 'PowerShell 7-only feature used; the offline target has Windows PowerShell 5.1.' >&2
   exit 1
 fi
+# 5.1's ConvertFrom-Json emits a JSON array as one pipeline object; assign it
+# to a variable before iterating (broke evidence collection on the first VM run).
+if rg -n 'ConvertFrom-Json *\| *(ForEach-Object|Where-Object|%|\?)' --glob '*.ps1' --glob '*.psm1' "$harness" "$repo_root/scripts"; then
+  echo 'ConvertFrom-Json piped into ForEach/Where-Object; Windows PowerShell 5.1 does not enumerate JSON arrays there.' >&2
+  exit 1
+fi
 if rg -n '[^\x00-\x7F]' --glob '*.ps1' --glob '*.psm1' "$harness" "$repo_root/scripts"; then
   echo 'Non-ASCII character in a PowerShell file (Windows PowerShell 5.1 would misread it).' >&2
   exit 1

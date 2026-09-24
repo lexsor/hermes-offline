@@ -44,8 +44,17 @@ function Resolve-ProcessLabel {
 
 $caseWindows = @()
 if ($CaseTimeline -and (Test-Path -LiteralPath $CaseTimeline)) {
-    $caseWindows = @(Get-Content -LiteralPath $CaseTimeline -Raw | ConvertFrom-Json | ForEach-Object {
-        [pscustomobject]@{ id = $_.id; start = [datetime]::Parse($_.started_local); end = [datetime]::Parse($_.ended_local) }
+    # Assign before iterating: Windows PowerShell 5.1's ConvertFrom-Json emits a
+    # JSON array as ONE pipeline object, so piping it straight into
+    # ForEach-Object would see every case at once.
+    $timeline = Get-Content -LiteralPath $CaseTimeline -Raw | ConvertFrom-Json
+    $invariant = [Globalization.CultureInfo]::InvariantCulture
+    $caseWindows = @(foreach ($entry in @($timeline)) {
+        [pscustomobject]@{
+            id = $entry.id
+            start = [datetime]::Parse($entry.started_local, $invariant)
+            end = [datetime]::Parse($entry.ended_local, $invariant)
+        }
     })
 }
 function Resolve-CaseId {
