@@ -70,6 +70,8 @@ rg -q 'firewallOldest -gt \$Since' "$harness/Collect-NetworkEvidence.ps1"
 # PIDs are resolved per event time, not joined across reuse.
 rg -q 'Resolve-ProcessOwner' "$harness/Collect-NetworkEvidence.ps1"
 rg -q "PIP_NO_CACHE_DIR" "$repo_root/scripts/lib/OfflineHermes.psm1"
+rg -q "npm_config_cache = \(Join-Path \\\$CacheRoot" "$repo_root/scripts/lib/OfflineHermes.psm1"
+rg -q 'install changed host state' "$harness/Invoke-Phase4.ps1"
 
 # The firewall service holds pfirewall.log open for writing; it must be read
 # with ReadWrite sharing (File.ReadLines failed on the first VM run).

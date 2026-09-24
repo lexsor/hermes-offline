@@ -212,9 +212,15 @@ try {
             return (Test-Path -LiteralPath (Join-Path $InstallRoot 'install-state.json'))
         }
         if (Test-Path -LiteralPath $InstallRoot) { throw "Install root already exists: $InstallRoot (T4 requires a clean install)." }
+        $hostBefore = @(Get-CleanHostFindings)
         $run = Invoke-LoggedScript -Script (Join-Path $repoRoot 'scripts\install-offline.ps1') `
             -Arguments @('-InstallRoot', $InstallRoot, '-HermesHome', $HermesHome) -LogName 'T4-install'
         $notes.Add("install-offline exit $($run.ExitCode)")
+        # The install must not create host-level caches or tools outside its
+        # own roots (run 1 on Azure left %LOCALAPPDATA%\npm-cache behind).
+        $leaked = @(Get-CleanHostFindings | Where-Object { $hostBefore -notcontains $_ })
+        foreach ($finding in $leaked) { $notes.Add("install changed host state: $finding") }
+        if ($leaked.Count -gt 0) { return $false }
         foreach ($relative in @('app\Hermes.exe', 'venv\Scripts\hermes.exe', 'runtime\node\node.exe', 'launch-hermes.cmd', 'hermes-offline.cmd')) {
             if (-not (Test-Path -LiteralPath (Join-Path $InstallRoot $relative))) { $notes.Add("missing $relative"); return $false }
         }

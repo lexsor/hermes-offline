@@ -180,6 +180,10 @@ function Get-OfflineNetworkGuard {
         ELECTRON_GET_USE_PROXY = '1'
         ELECTRON_MIRROR = "$deadProxy/offline-hermes-blocked/"
         ELECTRON_SKIP_BINARY_DOWNLOAD = '1'
+        # Every npm invocation (including `npm run` during the desktop build)
+        # writes logs into its cache; keep it out of %LOCALAPPDATA%\npm-cache.
+        npm_config_cache = (Join-Path $CacheRoot 'npm')
+        npm_config_update_notifier = 'false'
         electron_config_cache = (Join-Path $CacheRoot 'electron')
         ELECTRON_BUILDER_CACHE = (Join-Path $CacheRoot 'electron-builder')
         PIP_NO_INDEX = '1'
