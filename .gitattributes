@@ -23,3 +23,6 @@ upstream/** -text
 
 # Our POSIX scripts must stay LF even with core.autocrlf=true.
 *.sh text eol=lf
+
+# Patches are hashed in manifests/patches.lock; keep their bytes exact.
+patches/*.patch -text

@@ -77,4 +77,26 @@ require 'HERMES_HOME' "$repo_root/scripts/install-offline.ps1"
 require 'check: false' "$repo_root/scripts/install-offline.ps1"
 require 'check: false' "$repo_root/config/hermes.example.yaml"
 
+# Upstream patches: every entry in manifests/patches.lock exists with the
+# recorded hash, and the installer applies them to the staged source.
+require 'Install-UpstreamPatches' "$repo_root/scripts/install-offline.ps1"
+lock="$repo_root/manifests/patches.lock"
+[[ -f "$lock" ]] || { echo 'Missing manifests/patches.lock' >&2; exit 1; }
+declared="$(sed -n 's/^patch_count = \([0-9]*\)$/\1/p' "$lock")"
+listed=0
+while IFS= read -r path; do
+  IFS= read -r sum
+  listed=$((listed + 1))
+  file="$repo_root/$path"
+  [[ -f "$file" ]] || { echo "Patch listed in patches.lock is missing: $path" >&2; exit 1; }
+  actual="$(sha256sum "$file" | cut -d' ' -f1)"
+  [[ "$actual" == "$sum" ]] || { echo "Patch hash mismatch: $path (lock $sum, file $actual)" >&2; exit 1; }
+done < <(sed -n 's/^path = "\(.*\)"$/\1/p; s/^sha256 = "\(.*\)"$/\1/p' "$lock")
+[[ "$listed" == "$declared" ]] || { echo "patches.lock declares $declared patches but lists $listed" >&2; exit 1; }
+for patch in "$repo_root"/patches/*.patch; do
+  [[ -e "$patch" ]] || continue
+  rel="${patch#$repo_root/}"
+  grep -q "path = \"$rel\"" "$lock" || { echo "Unlisted patch file: $rel" >&2; exit 1; }
+done
+
 echo 'Phase 3 static checks passed.'

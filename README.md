@@ -6,7 +6,7 @@ Every dependency needed to install it ships in this repository as a pinned, chec
 
 | | |
 |---|---|
-| Upstream | `NousResearch/hermes-agent` at `bc655bf` (Hermes Agent v0.21.3), unmodified; see [`manifests/upstream.lock`](manifests/upstream.lock) |
+| Upstream | `NousResearch/hermes-agent` at `bc655bf` (Hermes Agent v0.21.3), stored unmodified; see [`manifests/upstream.lock`](manifests/upstream.lock). One offline patch is applied at install time; see [`manifests/patches.lock`](manifests/patches.lock) |
 | Profile | `windows-x64-desktop`: Windows 10/11 x64, CPython 3.11.16, Node 26.9.0, Electron 40.10.2 |
 | Vendored | 1,110 checksummed files: 68 Python wheels, 1,027 npm tarballs, 10 runtime/tool binaries, the Electron runtime, 3 source archives |
 | Host requirement | Windows PowerShell 5.1, which ships with Windows. Nothing else. |
@@ -96,6 +96,7 @@ For the Phase 4 network-blocked validation:
 
 ```
 upstream/hermes-agent/  pristine upstream snapshot (tree hash pinned in manifests/upstream.lock)
+patches/                reviewed offline-profile patches, applied to the staged source at install (manifests/patches.lock)
 vendor/                 immutable artifacts: python/, node/, binaries/, browser/, source/ (Git LFS)
 manifests/              per-kind locks, licenses.lock, checksums.sha256 (the install-time source of truth)
 scripts/                verify-deps, install-offline, verify-offline, bootstrap, build-bundle (.ps1, plus .sh shims)

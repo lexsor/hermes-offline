@@ -8,5 +8,5 @@ import_mode = "committed-tree"
 vcs_metadata = "not committed; upstream .git kept outside this repository"
 path = "upstream/hermes-agent"
 submodules = "none"
-patches = "none"
+patches = "see manifests/patches.lock"
 

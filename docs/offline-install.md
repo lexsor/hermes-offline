@@ -20,6 +20,14 @@ The installer verifies every vendored byte before mutation, extracts the pinned 
 
 Launch with `launch-hermes.cmd`; run the CLI with `hermes-offline.cmd`. Both launchers pin `HERMES_HOME` and force lazy dependency installation, pip indexes, and uv networking off.
 
+## Upstream patches
+
+`upstream/hermes-agent` is kept byte-identical to the pinned commit. Where upstream behavior conflicts with offline operation and cannot be wrapped from outside, a reviewed patch in `patches/` is applied to the installer's **staged copy** of the source before anything is built. Each patch is listed with its SHA-256, target and reason in `manifests/patches.lock`. The installer checks each patch's hash and then runs `git apply --check` with the bundled Git. A patch that no longer applies (for example after an upstream refresh) stops the install with a message naming it.
+
+| Patch | Why |
+|---|---|
+| `0001-desktop-no-remote-theme-fonts.patch` | The desktop's default theme injects a Google Fonts stylesheet on every start (the Phase 4 Azure run recorded the blocked DNS attempts from `Hermes.exe`). Remote theme fonts are no longer injected; every theme's font stack falls back to system fonts. |
+
 ## Explicit limitations
 
 The application still needs a configured inference provider. A loopback/LAN provider can be configured from the examples under `config/`; credentials remain user-owned and outside Git. Features excluded from the profile fail as unavailable rather than being downloaded.

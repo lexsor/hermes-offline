@@ -309,6 +309,11 @@ try {
         throw 'PortableGit extraction completed without runtime\git\cmd\git.exe.'
     }
 
+    # Reviewed offline-profile patches (manifests/patches.lock) go onto the
+    # staged source before anything is built from it.
+    Write-Host 'Applying offline-profile patches to the staged source...'
+    Install-UpstreamPatches -RepoRoot $repoRoot -SourceRoot $sourceRoot -GitExe (Join-Path $gitRoot 'cmd\git.exe') | Out-Null
+
     $wheelRoot = Join-Path $repoRoot 'vendor\python\windows-x64-cp311'
     $wheels = @(Get-ChildItem -LiteralPath $wheelRoot -Filter '*.whl' -File | Sort-Object Name)
     if ($wheels.Count -ne 68) { throw "Expected 68 Python wheels but found $($wheels.Count)." }

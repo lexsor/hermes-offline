@@ -1,0 +1,11 @@
+format_version = 1
+profile = "windows-x64-desktop"
+upstream_commit = "bc655bfb40ff7414bbec9dd179b17cf41e2f60ba"
+patch_count = 1
+applied_by = "scripts/install-offline.ps1, to the staged copy of upstream/hermes-agent (upstream/ itself is never modified)"
+
+[[patch]]
+path = "patches/0001-desktop-no-remote-theme-fonts.patch"
+sha256 = "340e40f3909b85e505ac438fe0dfa8c6ceb0044ac892745d97754b452ef24347"
+target = "apps/desktop/src/themes/context.tsx"
+reason = "The default desktop theme injects a Google Fonts stylesheet at every start; Phase 4 T7 recorded the blocked DNS attempts from Hermes.exe. Remote theme fonts are never injected; theme font stacks fall back to system fonts."

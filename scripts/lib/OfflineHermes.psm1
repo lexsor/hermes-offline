@@ -225,6 +225,74 @@ function Invoke-WithEnvironment {
     }
 }
 
+function Get-UpstreamPatchRecords {
+    param([Parameter(Mandatory)][string]$RepoRoot)
+
+    $lock = Join-Path $RepoRoot 'manifests\patches.lock'
+    if (-not (Test-Path -LiteralPath $lock -PathType Leaf)) {
+        throw "Missing patch manifest: manifests/patches.lock"
+    }
+    $records = [System.Collections.Generic.List[object]]::new()
+    $current = $null
+    foreach ($line in [System.IO.File]::ReadAllLines($lock)) {
+        if ($line.Trim() -eq '[[patch]]') {
+            $current = @{}
+            $records.Add($current)
+            continue
+        }
+        if ($null -ne $current -and $line -match '^\s*([a-z0-9_]+)\s*=\s*"(.*)"\s*$') {
+            $current[$Matches[1]] = $Matches[2]
+        }
+    }
+    foreach ($record in $records) {
+        foreach ($field in 'path', 'sha256', 'target') {
+            if (-not $record.ContainsKey($field)) { throw "manifests/patches.lock has a [[patch]] entry without '$field'." }
+        }
+    }
+    return $records.ToArray()
+}
+
+function Install-UpstreamPatches {
+    # Apply the reviewed offline-profile patches to the STAGED source copy.
+    # upstream/ itself is never modified. A patch that no longer applies (for
+    # example after an upstream refresh) stops the install instead of
+    # silently shipping unpatched behavior.
+    param(
+        [Parameter(Mandatory)][string]$RepoRoot,
+        [Parameter(Mandatory)][string]$SourceRoot,
+        [Parameter(Mandatory)][string]$GitExe
+    )
+
+    $records = @(Get-UpstreamPatchRecords -RepoRoot $RepoRoot)
+    # Never let git discover a repository above the staged tree.
+    $gitEnvironment = @{
+        GIT_CEILING_DIRECTORIES = (Split-Path -Parent $SourceRoot)
+        GIT_CONFIG_NOSYSTEM = '1'
+        GIT_CONFIG_GLOBAL = 'NUL'
+    }
+    foreach ($record in $records) {
+        $patch = Join-Path $RepoRoot ($record.path.Replace('/', '\'))
+        if (-not (Test-Path -LiteralPath $patch -PathType Leaf)) {
+            throw "Missing patch: $($record.path)`nManifest: manifests/patches.lock"
+        }
+        $actual = (Get-FileHash -LiteralPath $patch -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($actual -ne $record.sha256.ToLowerInvariant()) {
+            throw "Patch checksum mismatch: $($record.path)`nExpected: $($record.sha256)`nActual:   $actual"
+        }
+        Invoke-WithEnvironment -Variables $gitEnvironment -ScriptBlock {
+            try {
+                Invoke-CheckedCommand -FilePath $GitExe -ArgumentList @('apply', '--check', '-p1', $patch) -WorkingDirectory $SourceRoot
+            }
+            catch {
+                throw "Patch $($record.path) no longer applies to $($record.target) in the pinned upstream source. Update patches/ and manifests/patches.lock before installing."
+            }
+            Invoke-CheckedCommand -FilePath $GitExe -ArgumentList @('apply', '-p1', $patch) -WorkingDirectory $SourceRoot
+        }
+        Write-Host "Applied $($record.path) -> $($record.target)"
+    }
+    return $records.Count
+}
+
 function Write-OfflineHermesFailure {
     # Print the failure message verbatim on stderr. Write-Error under Windows
     # PowerShell 5.1 prefixes the script path and wraps at the console width,
@@ -238,6 +306,8 @@ Export-ModuleMember -Function @(
     'Copy-DirectoryContents',
     'Expand-ZipClean',
     'Get-ChecksumRecords',
+    'Get-UpstreamPatchRecords',
+    'Install-UpstreamPatches',
     'Get-OfflineHermesRepoRoot',
     'Get-OfflineNetworkGuard',
     'Invoke-CheckedCommand',

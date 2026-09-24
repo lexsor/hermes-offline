@@ -1,0 +1,13 @@
+--- a/apps/desktop/src/themes/context.tsx
++++ b/apps/desktop/src/themes/context.tsx
+@@ -303,7 +303,9 @@
+     // falls back to prefers-color-scheme.
+   }
+ 
+-  if (typo.fontUrl && !INJECTED_FONT_URLS.has(typo.fontUrl)) {
++  // Offline Hermes: never fetch theme fonts from the network (Google Fonts);
++  // the theme's CSS font stack falls back to locally installed fonts.
++  if (typo.fontUrl && !/^(https?:)?\/\//i.test(typo.fontUrl) && !INJECTED_FONT_URLS.has(typo.fontUrl)) {
+     const link = document.createElement('link')
+     link.rel = 'stylesheet'
+     link.href = typo.fontUrl
