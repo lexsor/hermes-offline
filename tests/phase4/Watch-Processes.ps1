@@ -22,6 +22,7 @@ if (-not (Test-Path -LiteralPath $OutputCsv)) {
 
 $seen = [System.Collections.Generic.HashSet[string]]::new()
 Write-Host "Sampling processes into $OutputCsv every $IntervalMilliseconds ms. Press Ctrl+C to stop."
+$lastBeat = [DateTime]::MinValue
 while ($true) {
     foreach ($process in Get-CimInstance -ClassName Win32_Process -Property ProcessId, Name, ExecutablePath, CommandLine, CreationDate) {
         $key = "$($process.ProcessId)|$($process.CreationDate)"
@@ -33,6 +34,13 @@ while ($true) {
             command_line = $process.CommandLine
             first_seen = [DateTime]::Now.ToString('o')
         } | Export-Csv -LiteralPath $OutputCsv -Append -NoTypeInformation -Encoding utf8
+    }
+    if (([DateTime]::Now - $lastBeat).TotalSeconds -ge 10) {
+        $lastBeat = [DateTime]::Now
+        # Heartbeat (every 10 s): lets Collect-NetworkEvidence.ps1 know when
+        # sampling stopped even if no new process appeared near the end.
+        [pscustomobject]@{ pid = -1; name = '__heartbeat__'; path = ''; command_line = ''; first_seen = [DateTime]::Now.ToString('o') } |
+            Export-Csv -LiteralPath $OutputCsv -Append -NoTypeInformation -Encoding utf8
     }
     Start-Sleep -Milliseconds $IntervalMilliseconds
 }

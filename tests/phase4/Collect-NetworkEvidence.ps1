@@ -42,14 +42,27 @@ $processTimeline = @{}
 $processLogs = @(@($ProcessLog) | ForEach-Object { $_ -split ',' } | Where-Object { $_ } | ForEach-Object { $_.Trim() })
 foreach ($log in $processLogs) {
     if (-not (Test-Path -LiteralPath $log)) { Write-Warning "Process log not found: $log"; continue }
-    foreach ($row in Import-Csv -LiteralPath $log) {
-        if (-not $processTimeline.ContainsKey($row.pid)) {
-            $processTimeline[$row.pid] = [System.Collections.Generic.List[object]]::new()
-        }
-        $processTimeline[$row.pid].Add([pscustomobject]@{
+    $entries = @(foreach ($row in Import-Csv -LiteralPath $log) {
+        [pscustomobject]@{
+            pid = $row.pid
             start = [DateTimeOffset]::Parse($row.first_seen, $invariant).LocalDateTime
             image = $(if ($row.path) { $row.path } else { $row.name })
-        })
+            sampledUntil = $null
+        }
+    })
+    if ($entries.Count -eq 0) { continue }
+    # A sampler only knows PID owners while it runs. The newest record in its
+    # log approximates when it stopped; after that a PID may have been reused
+    # (the Azure rerun misattributed Edge WebView lookups made 12 minutes after
+    # sampling ended to an exited Hermes python.exe).
+    $sampledUntil = ($entries | Measure-Object -Property start -Maximum).Maximum
+    foreach ($entry in $entries) {
+        if ($entry.pid -eq '-1') { continue }   # sampler heartbeat
+        $entry.sampledUntil = $sampledUntil
+        if (-not $processTimeline.ContainsKey($entry.pid)) {
+            $processTimeline[$entry.pid] = [System.Collections.Generic.List[object]]::new()
+        }
+        $processTimeline[$entry.pid].Add($entry)
     }
 }
 # Sort once, after every log is loaded (sorting yields fixed-size arrays).
@@ -64,10 +77,13 @@ function Resolve-ProcessOwner {
     # The sampler polls every 500 ms; a process can connect before it is seen.
     $cutoff = $When.AddSeconds(2)
     foreach ($entry in $processTimeline[$ProcessId]) {
-        if ($entry.start -le $cutoff) { $owner = $entry.image } else { break }
+        if ($entry.start -le $cutoff) { $owner = $entry } else { break }
     }
-    if ($owner) { return $owner }
-    return "pid $ProcessId (not yet sampled)"
+    if (-not $owner) { return "pid $ProcessId (not yet sampled)" }
+    if ($When -gt $owner.sampledUntil.AddSeconds(5)) {
+        return "pid $ProcessId (after sampling ended; last seen as $($owner.image))"
+    }
+    return $owner.image
 }
 
 $testRoots = @(

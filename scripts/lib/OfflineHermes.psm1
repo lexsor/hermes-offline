@@ -5,16 +5,26 @@ function Get-OfflineHermesRepoRoot {
     return (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 }
 
+function Get-NativeWindowsArchitecture {
+    # The machine's native architecture (AMD64, ARM64, x86), independent of the
+    # current process's bitness or emulation. Deliberately avoids the .NET
+    # runtime-information OSArchitecture API: on the first Azure run an
+    # interactive Windows PowerShell 5.1 session resolved it without the property.
+    $key = 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment'
+    $native = (Get-ItemProperty -LiteralPath $key -Name PROCESSOR_ARCHITECTURE -ErrorAction SilentlyContinue).PROCESSOR_ARCHITECTURE
+    if (-not $native) {
+        $native = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
+    }
+    return [string]$native
+}
+
 function Assert-NativeWindowsX64 {
-    $isWindowsHost = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
-        [System.Runtime.InteropServices.OSPlatform]::Windows
-    )
-    if (-not $isWindowsHost) {
+    if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
         throw 'The windows-x64-desktop profile must be installed from native Windows PowerShell.'
     }
 
-    $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
-    if ($arch -ne 'X64') {
+    $arch = Get-NativeWindowsArchitecture
+    if ($arch -ne 'AMD64') {
         throw "Unsupported architecture '$arch'. This bundle contains only the windows-x64-desktop profile."
     }
 }

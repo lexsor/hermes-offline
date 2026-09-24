@@ -139,6 +139,7 @@ function Start-ProcessSampler {
     return Start-Job -ArgumentList $OutputCsv, $IntervalMilliseconds -ScriptBlock {
         param($csv, $interval)
         $seen = [System.Collections.Generic.HashSet[string]]::new()
+        $lastBeat = [DateTime]::MinValue
         while ($true) {
             foreach ($process in Get-CimInstance -ClassName Win32_Process -Property ProcessId, Name, ExecutablePath, CommandLine, CreationDate) {
                 $key = "$($process.ProcessId)|$($process.CreationDate)"
@@ -150,6 +151,13 @@ function Start-ProcessSampler {
                     command_line = $process.CommandLine
                     first_seen = [DateTime]::Now.ToString('o')
                 } | Export-Csv -LiteralPath $csv -Append -NoTypeInformation -Encoding utf8
+            }
+            if (([DateTime]::Now - $lastBeat).TotalSeconds -ge 10) {
+                $lastBeat = [DateTime]::Now
+                # Heartbeat (every 10 s): lets Collect-NetworkEvidence.ps1 know when
+                # sampling stopped even if no new process appeared near the end.
+                [pscustomobject]@{ pid = -1; name = '__heartbeat__'; path = ''; command_line = ''; first_seen = [DateTime]::Now.ToString('o') } |
+                    Export-Csv -LiteralPath $csv -Append -NoTypeInformation -Encoding utf8
             }
             Start-Sleep -Milliseconds $interval
         }

@@ -73,6 +73,16 @@ if rg -n -e 'Start-ThreadJob|SkipHttpErrorCheck|ForEach-Object -Parallel|AsHasht
   echo 'PowerShell 7-only feature used; the offline target has Windows PowerShell 5.1.' >&2
   exit 1
 fi
+# RuntimeInformation.OSArchitecture was missing in an interactive 5.1 session
+# on the Azure VM; architecture comes from the registry instead.
+if rg -n 'RuntimeInformation' --glob '*.ps1' --glob '*.psm1' "$harness" "$repo_root/scripts"; then
+  echo 'RuntimeInformation used; it is not reliable in Windows PowerShell 5.1 (use Get-NativeWindowsArchitecture).' >&2
+  exit 1
+fi
+require 'sampledUntil' "$harness/Collect-NetworkEvidence.ps1"
+require '__heartbeat__' "$harness/Watch-Processes.ps1"
+require '__heartbeat__' "$harness/Phase4.psm1"
+
 # Evidence completeness (first Azure run: the 1 MB DNS log wrapped and lost
 # every test-window event while the collector still reported "read").
 require '/ms:536870912' "$harness/Enable-NetworkBlock.ps1"
