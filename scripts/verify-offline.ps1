@@ -46,6 +46,8 @@ try {
         $venvPython = Join-Path $InstallRoot 'venv\Scripts\python.exe'
         $probe = 'import yaml, dotenv; from hermes_cli.config import load_config; c = load_config(); ' +
             'assert c.get("updates", {}).get("check", True) is False, "updates.check is not false"; ' +
+            'assert (c.get("model_catalog") or {}).get("enabled", True) is False, "model_catalog.enabled is not false"; ' +
+            'assert str((c.get("models_dev") or {}).get("url", "")).startswith("http://127.0.0.1"), "models_dev.url is not a loopback address"; ' +
             'print("Hermes Python import/config probe passed.")'
         Invoke-CheckedCommand -FilePath $venvPython -ArgumentList @('-c', $probe)
 

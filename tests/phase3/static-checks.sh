@@ -76,6 +76,12 @@ require 'ELECTRON_BUILDER_CACHE' "$repo_root/scripts/lib/OfflineHermes.psm1"
 require 'HERMES_HOME' "$repo_root/scripts/install-offline.ps1"
 require 'check: false' "$repo_root/scripts/install-offline.ps1"
 require 'check: false' "$repo_root/config/hermes.example.yaml"
+# The desktop backend's catalog downloads must be off in every seeded/example home.
+for f in scripts/install-offline.ps1 config/hermes.example.yaml tests/phase4/Start-MockProvider.ps1; do
+  require '^model_catalog:' "$repo_root/$f"
+  require '127\.0\.0\.1:9/offline-hermes-models-dev-disabled' "$repo_root/$f"
+done
+require 'model_catalog.enabled is not false' "$repo_root/scripts/verify-offline.ps1"
 
 # Upstream patches: every entry in manifests/patches.lock exists with the
 # recorded hash, and the installer applies them to the staged source.

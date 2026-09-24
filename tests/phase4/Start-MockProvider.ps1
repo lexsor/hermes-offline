@@ -75,6 +75,10 @@ telemetry:
   shared_metrics:
     enabled: false
     send: false
+model_catalog:
+  enabled: false
+models_dev:
+  url: "http://127.0.0.1:9/offline-hermes-models-dev-disabled"
 "@
 [IO.File]::WriteAllText((Join-Path $HermesHome 'config.yaml'), $config, [Text.UTF8Encoding]::new($false))
 [IO.File]::WriteAllText((Join-Path $HermesHome '.env'), "MOCK_API_KEY=phase4-mock-placeholder`n", [Text.UTF8Encoding]::new($false))

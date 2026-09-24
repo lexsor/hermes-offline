@@ -138,6 +138,12 @@ function Initialize-HermesHome {
     $configPath = Join-Path $HermesHome 'config.yaml'
     if (Test-Path -LiteralPath $configPath) {
         Write-Host "Keeping existing Hermes configuration: $configPath"
+        $existing = [IO.File]::ReadAllText($configPath)
+        if ($existing -notmatch '(?m)^model_catalog:' -or $existing -notmatch '(?m)^models_dev:') {
+            Write-Warning ("$configPath predates the offline catalog settings. The desktop backend will try to " +
+                "reach hermes-agent.nousresearch.com, raw.githubusercontent.com and models.dev until you add:`n" +
+                "model_catalog:`n  enabled: false`nmodels_dev:`n  url: `"http://127.0.0.1:9/offline-hermes-models-dev-disabled`"")
+        }
         return
     }
     $seed = @'
@@ -149,8 +155,17 @@ telemetry:
   shared_metrics:
     enabled: false
     send: false
+# The desktop backend downloads a model catalog (hermes-agent.nousresearch.com,
+# falling back to raw.githubusercontent.com) and the models.dev registry.
+# Offline, disable the catalog and point models.dev at a closed loopback port
+# so the fetch fails instantly without any DNS lookup; Hermes then uses cached
+# or built-in model data. Set context lengths for local models explicitly.
+model_catalog:
+  enabled: false
+models_dev:
+  url: "http://127.0.0.1:9/offline-hermes-models-dev-disabled"
 '@
-    [IO.File]::WriteAllText($configPath, $seed, [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText($configPath, $seed + "`n", [Text.UTF8Encoding]::new($false))
     Write-Host "Seeded offline Hermes configuration: $configPath"
 }
 

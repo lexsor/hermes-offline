@@ -20,6 +20,14 @@ providers:
 updates:
   check: false
 
+# Required offline: the desktop backend otherwise downloads a model catalog
+# (hermes-agent.nousresearch.com, then raw.githubusercontent.com) and the
+# models.dev registry. The loopback URL fails instantly with no DNS lookup.
+model_catalog:
+  enabled: false
+models_dev:
+  url: "http://127.0.0.1:9/offline-hermes-models-dev-disabled"
+
 telemetry:
   shared_metrics:
     enabled: false
