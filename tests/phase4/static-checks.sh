@@ -12,6 +12,16 @@ if ! command -v rg >/dev/null 2>&1; then
   exit 2
 fi
 
+# Positive checks: fail loudly, naming the missing pattern (a bare `rg -q`
+# under `set -e` exits silently).
+require() {
+  if [[ "$1" == "--" ]]; then shift; fi
+  if ! rg -q -- "$1" "$2"; then
+    echo "Static check failed: pattern '$1' not found in ${2#$repo_root/}" >&2
+    exit 1
+  fi
+}
+
 required=(
   Phase4.psm1
   Enable-NetworkBlock.ps1
@@ -22,6 +32,7 @@ required=(
   mock-provider.mjs
   Invoke-Phase4.ps1
   New-Phase4Vm.ps1
+  Watch-Processes.ps1
   desktop-checklist.md
 )
 for relative in "${required[@]}"; do
@@ -38,22 +49,22 @@ if rg -n 'https?://[a-z0-9.-]+\.(org|com|io|net|dev)' --glob '*.ps1' --glob '*.m
 fi
 
 # The block script must keep its safety interlocks.
-rg -q 'IUnderstandThisBlocksAllOutboundTraffic' "$harness/Enable-NetworkBlock.ps1"
-rg -q 'Test-IsVirtualMachine' "$harness/Enable-NetworkBlock.ps1"
-rg -q 'Test-IsAdministrator' "$harness/Enable-NetworkBlock.ps1"
-rg -q 'advfirewall export' "$harness/Enable-NetworkBlock.ps1"
-rg -q 'advfirewall import' "$harness/Disable-NetworkBlock.ps1"
+require 'IUnderstandThisBlocksAllOutboundTraffic' "$harness/Enable-NetworkBlock.ps1"
+require 'Test-IsVirtualMachine' "$harness/Enable-NetworkBlock.ps1"
+require 'Test-IsAdministrator' "$harness/Enable-NetworkBlock.ps1"
+require 'advfirewall export' "$harness/Enable-NetworkBlock.ps1"
+require 'advfirewall import' "$harness/Disable-NetworkBlock.ps1"
 # New-NetFirewallRule rejects loopback addresses (found on the first Azure
 # run), and a failed enable must roll itself back.
 if rg -n "RemoteAddress[^#]*('127\.|'::1')" "$harness/Enable-NetworkBlock.ps1"; then
   echo 'Enable-NetworkBlock.ps1 passes a loopback address to a firewall rule; Windows rejects it.' >&2
   exit 1
 fi
-rg -q 'Disable-NetworkBlock.ps1' "$harness/Enable-NetworkBlock.ps1"
+require 'Disable-NetworkBlock.ps1' "$harness/Enable-NetworkBlock.ps1"
 
 # The VM must never be staged while connected.
-rg -q 'SwitchType Private' "$harness/New-Phase4Vm.ps1"
-rg -q 'non-isolated switch' "$harness/New-Phase4Vm.ps1"
+require 'SwitchType Private' "$harness/New-Phase4Vm.ps1"
+require 'non-isolated switch' "$harness/New-Phase4Vm.ps1"
 
 # A clean guest has only Windows PowerShell 5.1: forbid PowerShell 7-only
 # features and non-ASCII (5.1 reads BOM-less scripts as ANSI).
@@ -64,14 +75,15 @@ if rg -n -e 'Start-ThreadJob|SkipHttpErrorCheck|ForEach-Object -Parallel|AsHasht
 fi
 # Evidence completeness (first Azure run: the 1 MB DNS log wrapped and lost
 # every test-window event while the collector still reported "read").
-rg -q '/ms:536870912' "$harness/Enable-NetworkBlock.ps1"
-rg -q -- '-Oldest -MaxEvents 1' "$harness/Collect-NetworkEvidence.ps1"
-rg -q 'firewallOldest -gt \$Since' "$harness/Collect-NetworkEvidence.ps1"
+require '/ms:536870912' "$harness/Enable-NetworkBlock.ps1"
+require -- '-Oldest -MaxEvents 1' "$harness/Collect-NetworkEvidence.ps1"
+require 'firewallOldest -gt \$requiredFrom' "$harness/Collect-NetworkEvidence.ps1"
+require 'pfirewall.log.old|\$FirewallLogPath.old' "$harness/Collect-NetworkEvidence.ps1"
 # PIDs are resolved per event time, not joined across reuse.
-rg -q 'Resolve-ProcessOwner' "$harness/Collect-NetworkEvidence.ps1"
-rg -q "PIP_NO_CACHE_DIR" "$repo_root/scripts/lib/OfflineHermes.psm1"
-rg -q "npm_config_cache = \(Join-Path \\\$CacheRoot" "$repo_root/scripts/lib/OfflineHermes.psm1"
-rg -q 'install changed host state' "$harness/Invoke-Phase4.ps1"
+require 'Resolve-ProcessOwner' "$harness/Collect-NetworkEvidence.ps1"
+require "PIP_NO_CACHE_DIR" "$repo_root/scripts/lib/OfflineHermes.psm1"
+require "npm_config_cache = \(Join-Path \\\$CacheRoot" "$repo_root/scripts/lib/OfflineHermes.psm1"
+require 'install changed host state' "$harness/Invoke-Phase4.ps1"
 
 # The firewall service holds pfirewall.log open for writing; it must be read
 # with ReadWrite sharing (File.ReadLines failed on the first VM run).

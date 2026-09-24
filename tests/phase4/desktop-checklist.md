@@ -6,7 +6,14 @@ Before each case, write the local start time in the notes. Collect-NetworkEviden
 
 ## Setup
 
-In a non-elevated PowerShell on the VM:
+First, in a **separate** PowerShell window that stays open for all manual cases, start the process sampler. The automated run's sampler has stopped, and without this every network event during the manual cases has an unattributable PID:
+
+```powershell
+cd C:\OfflineHermes-src
+powershell -ExecutionPolicy Bypass -File .\tests\phase4\Watch-Processes.ps1 -OutputCsv '<run evidence folder>\manual\processes-manual.csv'
+```
+
+Then, in a non-elevated PowerShell on the VM, with `<run evidence folder>\manual` as `$evidence` so the mock's files do not overwrite T6's:
 
 ```powershell
 $evidence = '<run evidence folder>'
@@ -75,8 +82,9 @@ Keep this window open. Anything launched from it inherits `OFFLINE_HERMES_HOME`.
 ```powershell
 Stop-Process -Id $mock.ProcessId
 Remove-Item Env:OFFLINE_HERMES_HOME
-# elevated:
-.\tests\phase4\Collect-NetworkEvidence.ps1 -EvidenceDirectory $evidence -ProcessLog "$evidence\processes.csv" -CaseTimeline "$evidence\results.json" -FailOnFindings
+# Stop the Watch-Processes window with Ctrl+C. Then, elevated, pointing at the RUN folder (not manual\):
+$run = '<run evidence folder>'
+.\tests\phase4\Collect-NetworkEvidence.ps1 -EvidenceDirectory $run -ProcessLog "$run\processes.csv,$run\manual\processes-manual.csv" -CaseTimeline "$run\results.json" -FailOnFindings
 ```
 
-The process sampler only runs during `Invoke-Phase4.ps1`. For drops during manual cases, the `pid` column plus your screenshots and process listings are the attribution evidence.
+Manual cases have no entries in `results.json`, so their events are reported as `between-cases`. Use `manual\timeline.txt` to place them.

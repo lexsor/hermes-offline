@@ -4,8 +4,9 @@ param(
     # Only events at or after this local time are considered (default: when
     # Enable-NetworkBlock.ps1 ran).
     [Parameter()][Nullable[datetime]]$Since,
-    # CSV written by Start-ProcessSampler, used to name the process behind a PID.
-    [Parameter()][string]$ProcessLog,
+    # CSV(s) written by Start-ProcessSampler / Watch-Processes.ps1, used to name
+    # the process behind a PID. Pass the automated run's and the manual cases'.
+    [Parameter()][string[]]$ProcessLog,
     # results.json from Invoke-Phase4.ps1; attributes each event to a test case.
     [Parameter()][string]$CaseTimeline,
     # Paths whose processes belong to the test (anything else is host background).
@@ -38,8 +39,10 @@ if (-not $Since) {
 # Windows reuses PIDs, so a PID is resolved to the image that held it at the
 # moment of the event, not to every image that ever had it.
 $processTimeline = @{}
-if ($ProcessLog -and (Test-Path -LiteralPath $ProcessLog)) {
-    foreach ($row in Import-Csv -LiteralPath $ProcessLog) {
+$processLogs = @(@($ProcessLog) | ForEach-Object { $_ -split ',' } | Where-Object { $_ } | ForEach-Object { $_.Trim() })
+foreach ($log in $processLogs) {
+    if (-not (Test-Path -LiteralPath $log)) { Write-Warning "Process log not found: $log"; continue }
+    foreach ($row in Import-Csv -LiteralPath $log) {
         if (-not $processTimeline.ContainsKey($row.pid)) {
             $processTimeline[$row.pid] = [System.Collections.Generic.List[object]]::new()
         }
@@ -48,9 +51,10 @@ if ($ProcessLog -and (Test-Path -LiteralPath $ProcessLog)) {
             image = $(if ($row.path) { $row.path } else { $row.name })
         })
     }
-    foreach ($key in @($processTimeline.Keys)) {
-        $processTimeline[$key] = @($processTimeline[$key] | Sort-Object start)
-    }
+}
+# Sort once, after every log is loaded (sorting yields fixed-size arrays).
+foreach ($key in @($processTimeline.Keys)) {
+    $processTimeline[$key] = @($processTimeline[$key] | Sort-Object start)
 }
 function Resolve-ProcessOwner {
     param([string]$ProcessId, [datetime]$When)
@@ -105,6 +109,16 @@ function Resolve-CaseId {
     return 'between-cases'
 }
 
+# Evidence must cover all TEST activity: from the first case's start (or, with
+# no timeline, from when the block was enabled). Enable-NetworkBlock.ps1
+# clears the DNS log right after recording enabled_at, so requiring coverage
+# from enabled_at itself would always report a spurious gap of a few seconds.
+$requiredFrom = $Since
+if ($caseWindows.Count -gt 0) {
+    $firstCase = ($caseWindows | Sort-Object start | Select-Object -First 1).start
+    if ($firstCase -gt $requiredFrom) { $requiredFrom = $firstCase }
+}
+
 function Get-DestinationClass {
     param([string]$Address)
     $ip = $null
@@ -128,11 +142,16 @@ $drops = [System.Collections.Generic.List[object]]::new()
 $firewallStatus = 'read'
 $firewallOldest = $null
 $reader = $null
+# At its size limit the firewall renames pfirewall.log to pfirewall.log.old
+# (discarding any previous .old); read both, oldest first.
+$firewallFiles = @(@("$FirewallLogPath.old", $FirewallLogPath) | Where-Object { Test-Path -LiteralPath $_ })
+if ($firewallFiles.Count -eq 0) { $firewallFiles = @($FirewallLogPath) }
 try {
+  foreach ($firewallFile in $firewallFiles) {
     $fields = $null
     # The firewall service keeps pfirewall.log open for writing; File.ReadLines
     # asks for exclusive read access and fails, so open it with ReadWrite sharing.
-    $stream = [System.IO.FileStream]::new($FirewallLogPath, [System.IO.FileMode]::Open,
+    $stream = [System.IO.FileStream]::new($firewallFile, [System.IO.FileMode]::Open,
         [System.IO.FileAccess]::Read, [System.IO.FileShare]'ReadWrite, Delete')
     $reader = [System.IO.StreamReader]::new($stream)
     while ($null -ne ($line = $reader.ReadLine())) {
@@ -159,11 +178,14 @@ try {
             bucket = Get-OwnerBucket $owner
         })
     }
+    $reader.Dispose()
+    $reader = $null
+  }
     if ($null -eq $firewallOldest) {
         $firewallStatus = 'incomplete: log has no records'
-    } elseif ($firewallOldest -gt $Since) {
-        # The log rotated (pfirewall.log.old) or logging started late.
-        $firewallStatus = "incomplete: log starts at $($firewallOldest.ToString('s')), after the block was enabled"
+    } elseif ($firewallOldest -gt $requiredFrom) {
+        # More than one rotation discarded records, or logging started late.
+        $firewallStatus = "incomplete: log starts at $($firewallOldest.ToString('s')), after the first test started ($($requiredFrom.ToString('s')))"
     }
 }
 catch [System.UnauthorizedAccessException] {
@@ -189,9 +211,9 @@ $localSuffixes = @('localhost', '.local', '.localdomain', '.home.arpa', '.in-add
 $computerName = $env:COMPUTERNAME.ToLowerInvariant()
 try {
     $oldestEvent = Get-WinEvent -LogName $dnsLog -Oldest -MaxEvents 1 -ErrorAction Stop
-    if ($oldestEvent.TimeCreated -gt $Since) {
+    if ($oldestEvent.TimeCreated -gt $requiredFrom) {
         # The log wrapped: its default 1 MB fills in about a minute on a busy host.
-        $dnsStatus = "incomplete: log starts at $($oldestEvent.TimeCreated.ToString('s')), after the block was enabled (log too small?)"
+        $dnsStatus = "incomplete: log starts at $($oldestEvent.TimeCreated.ToString('s')), after the first test started ($($requiredFrom.ToString('s'))); log too small?"
     }
     $events = @(Get-WinEvent -FilterHashtable @{ LogName = $dnsLog; Id = 3006; StartTime = $Since } -ErrorAction SilentlyContinue)
     foreach ($event in $events) {
@@ -241,6 +263,8 @@ foreach ($bucket in 'test', 'unattributed', 'host') {
 $summary = [pscustomobject]@{
     collected_at = [DateTime]::UtcNow.ToString('o')
     since_local = $Since.ToString('o')
+    coverage_required_from_local = $requiredFrom.ToString('o')
+    process_logs = $processLogs
     firewall_log = $firewallStatus
     dns_log = $dnsStatus
     test_public_drops = $buckets.test.drops.Count
@@ -264,7 +288,7 @@ Write-EvidenceJson -Path (Join-Path $EvidenceDirectory 'network-evidence.json') 
 $drops | Export-Csv -LiteralPath (Join-Path $EvidenceDirectory 'firewall-drops.csv') -NoTypeInformation -Encoding utf8
 $queries | Export-Csv -LiteralPath (Join-Path $EvidenceDirectory 'dns-queries.csv') -NoTypeInformation -Encoding utf8
 
-Write-Host "Network evidence since $($Since.ToString('s'))"
+Write-Host "Network evidence since $($Since.ToString('s')); coverage required from $($requiredFrom.ToString('s'))"
 Write-Host "  firewall log: $firewallStatus"
 Write-Host "  DNS log:      $dnsStatus"
 Write-Host "Hermes/test processes:  $($buckets.test.drops.Count) public drops, $($buckets.test.queries.Count) public DNS queries"
