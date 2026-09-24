@@ -1,5 +1,7 @@
 # Phase 4 on an Azure Windows 11 VM
 
+For the final clean run on a VM that already ran earlier rounds, use [phase-4-record-run.md](phase-4-record-run.md).
+
 A step-by-step runbook for the network-blocked validation on an Azure VM instead of the Hyper-V VM in `tests/phase4/New-Phase4Vm.ps1`. The test cases and pass criteria are in [phase-4-validation-plan.md](phase-4-validation-plan.md).
 
 On Azure you reach the VM over RDP, so the network block must never cut the RDP session:
