@@ -8,9 +8,13 @@ param(
     [Parameter()][string]$ProcessLog,
     # results.json from Invoke-Phase4.ps1; attributes each event to a test case.
     [Parameter()][string]$CaseTimeline,
+    # Paths whose processes belong to the test (anything else is host background).
+    [Parameter()][string]$InstallRoot = (Join-Path $env:LOCALAPPDATA 'OfflineHermes'),
+    [Parameter()][string]$HermesHome = (Join-Path $env:LOCALAPPDATA 'OfflineHermes-home'),
     [Parameter()][string]$FirewallLogPath = (Join-Path $env:SystemRoot 'System32\LogFiles\Firewall\pfirewall.log'),
     [Parameter()][string]$StateDirectory = (Join-Path $env:ProgramData 'OfflineHermesPhase4'),
-    # Exit 1 when any public-destination drop or public-name DNS query is found.
+    # Exit 1 when a Hermes/test process attempted public network access, or when
+    # either log does not cover the whole window (so "no attempts" is unprovable).
     [Parameter()][switch]$FailOnFindings
 )
 
@@ -18,6 +22,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'Phase4.psm1') -Force
 
+$invariant = [Globalization.CultureInfo]::InvariantCulture
 New-Item -ItemType Directory -Path $EvidenceDirectory -Force | Out-Null
 
 if (-not $Since) {
@@ -25,42 +30,78 @@ if (-not $Since) {
     if (-not (Test-Path -LiteralPath $statePath)) {
         throw "Pass -Since, or run Enable-NetworkBlock.ps1 first (no $statePath)."
     }
-    $Since = [datetime]::Parse((Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json).enabled_at_local)
+    $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
+    $Since = [datetime]::Parse($state.enabled_at_local, $invariant)
 }
 
-$processNames = @{}
+# --- Process ownership ------------------------------------------------------
+# Windows reuses PIDs, so a PID is resolved to the image that held it at the
+# moment of the event, not to every image that ever had it.
+$processTimeline = @{}
 if ($ProcessLog -and (Test-Path -LiteralPath $ProcessLog)) {
     foreach ($row in Import-Csv -LiteralPath $ProcessLog) {
-        if (-not $processNames.ContainsKey($row.pid)) { $processNames[$row.pid] = @() }
-        $processNames[$row.pid] += $(if ($row.path) { $row.path } else { $row.name })
+        if (-not $processTimeline.ContainsKey($row.pid)) {
+            $processTimeline[$row.pid] = [System.Collections.Generic.List[object]]::new()
+        }
+        $processTimeline[$row.pid].Add([pscustomobject]@{
+            start = [DateTimeOffset]::Parse($row.first_seen, $invariant).LocalDateTime
+            image = $(if ($row.path) { $row.path } else { $row.name })
+        })
+    }
+    foreach ($key in @($processTimeline.Keys)) {
+        $processTimeline[$key] = @($processTimeline[$key] | Sort-Object start)
     }
 }
-function Resolve-ProcessLabel {
-    param([string]$ProcessId)
+function Resolve-ProcessOwner {
+    param([string]$ProcessId, [datetime]$When)
     if (-not $ProcessId -or $ProcessId -eq '-') { return 'unknown' }
-    if ($processNames.ContainsKey($ProcessId)) { return (($processNames[$ProcessId] | Select-Object -Unique) -join ' | ') }
-    return "pid $ProcessId (not sampled)"
+    if (-not $processTimeline.ContainsKey($ProcessId)) { return "pid $ProcessId (never sampled)" }
+    $owner = $null
+    # The sampler polls every 500 ms; a process can connect before it is seen.
+    $cutoff = $When.AddSeconds(2)
+    foreach ($entry in $processTimeline[$ProcessId]) {
+        if ($entry.start -le $cutoff) { $owner = $entry.image } else { break }
+    }
+    if ($owner) { return $owner }
+    return "pid $ProcessId (not yet sampled)"
+}
+
+$testRoots = @(
+    (Get-Phase4RepoRoot), $InstallRoot, $HermesHome, (Join-Path ([IO.Path]::GetTempPath()) 'phase4-')
+) | ForEach-Object { $_.TrimEnd('\') }
+$testImages = @('node.exe', 'python.exe', 'pythonw.exe', 'hermes.exe', 'electron.exe', 'git.exe', 'git-remote-https.exe',
+    'curl.exe', 'ssh.exe', 'uv.exe', 'uvx.exe', 'rg.exe', 'pip.exe', 'npm.cmd', 'npx.cmd', 'tar.exe', '7za.exe', 'bash.exe', 'sh.exe')
+function Get-OwnerBucket {
+    # test: a Hermes/installer/tool process; any public attempt is a finding.
+    # unattributed: the PID could not be resolved; review by hand.
+    # host: Windows, Azure agents, Edge, OneDrive, Defender... (background noise).
+    param([string]$Owner)
+    if ($Owner -match '^(unknown|pid \d+)') { return 'unattributed' }
+    foreach ($root in $testRoots) {
+        if ($Owner.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) { return 'test' }
+    }
+    if ($testImages -contains ([IO.Path]::GetFileName($Owner)).ToLowerInvariant()) { return 'test' }
+    return 'host'
 }
 
 $caseWindows = @()
 if ($CaseTimeline -and (Test-Path -LiteralPath $CaseTimeline)) {
     # Assign before iterating: Windows PowerShell 5.1's ConvertFrom-Json emits a
-    # JSON array as ONE pipeline object, so piping it straight into
-    # ForEach-Object would see every case at once.
+    # JSON array as ONE pipeline object.
     $timeline = Get-Content -LiteralPath $CaseTimeline -Raw | ConvertFrom-Json
-    $invariant = [Globalization.CultureInfo]::InvariantCulture
     $caseWindows = @(foreach ($entry in @($timeline)) {
         [pscustomobject]@{
             id = $entry.id
-            start = [datetime]::Parse($entry.started_local, $invariant)
-            end = [datetime]::Parse($entry.ended_local, $invariant)
+            start = [datetime]::Parse($entry.started_local, $invariant).AddSeconds(-1)
+            end = [datetime]::Parse($entry.ended_local, $invariant).AddSeconds(1)
         }
     })
 }
 function Resolve-CaseId {
     param([datetime]$When)
-    $match = $caseWindows | Where-Object { $When -ge $_.start.AddSeconds(-1) -and $When -le $_.end.AddSeconds(1) } | Select-Object -First 1
-    if ($match) { return $match.id }
+    foreach ($window in $caseWindows) {
+        if ($When -ge $window.start -and $When -le $window.end) { return $window.id }
+    }
     return 'between-cases'
 }
 
@@ -85,6 +126,7 @@ function Get-DestinationClass {
 # --- Firewall drops -------------------------------------------------------
 $drops = [System.Collections.Generic.List[object]]::new()
 $firewallStatus = 'read'
+$firewallOldest = $null
 $reader = $null
 try {
     $fields = $null
@@ -99,11 +141,13 @@ try {
         $values = $line -split '\s+'
         $record = @{}
         for ($i = 0; $i -lt [Math]::Min($fields.Count, $values.Count); $i++) { $record[$fields[$i]] = $values[$i] }
+        $when = [datetime]::ParseExact("$($record['date']) $($record['time'])", 'yyyy-MM-dd HH:mm:ss', $invariant)
+        if ($null -eq $firewallOldest) { $firewallOldest = $when }
         if ($record['action'] -ne 'DROP' -or $record['path'] -ne 'SEND') { continue }
-        $when = [datetime]::ParseExact("$($record['date']) $($record['time'])", 'yyyy-MM-dd HH:mm:ss', [Globalization.CultureInfo]::InvariantCulture)
         if ($when -lt $Since) { continue }
         $class = Get-DestinationClass $record['dst-ip']
         if ($class -eq 'loopback') { continue }
+        $owner = Resolve-ProcessOwner $record['pid'] $when
         $drops.Add([pscustomobject]@{
             time = $when.ToString('s')
             protocol = $record['protocol']
@@ -111,83 +155,136 @@ try {
             class = $class
             case = Resolve-CaseId $when
             pid = $record['pid']
-            process = Resolve-ProcessLabel $record['pid']
+            process = $owner
+            bucket = Get-OwnerBucket $owner
         })
+    }
+    if ($null -eq $firewallOldest) {
+        $firewallStatus = 'incomplete: log has no records'
+    } elseif ($firewallOldest -gt $Since) {
+        # The log rotated (pfirewall.log.old) or logging started late.
+        $firewallStatus = "incomplete: log starts at $($firewallOldest.ToString('s')), after the block was enabled"
     }
 }
 catch [System.UnauthorizedAccessException] {
-    $firewallStatus = 'access-denied (run elevated)'
+    $firewallStatus = 'unavailable: access denied (run elevated)'
 }
 catch [System.IO.FileNotFoundException] {
-    $firewallStatus = 'missing (dropped-packet logging not enabled?)'
+    $firewallStatus = 'unavailable: missing (dropped-packet logging not enabled?)'
 }
 catch [System.IO.IOException] {
-    $firewallStatus = "unreadable: $($_.Exception.Message)"
+    $firewallStatus = "unavailable: $($_.Exception.Message)"
 }
 finally {
     if ($reader) { $reader.Dispose() }
 }
 
 # --- DNS client queries ---------------------------------------------------
+# Lookups are sent by the DNS client service (svchost), so the firewall log
+# cannot name the requester. Event 3006 records the requesting process.
+$dnsLog = 'Microsoft-Windows-DNS-Client/Operational'
 $queries = [System.Collections.Generic.List[object]]::new()
 $dnsStatus = 'read'
 $localSuffixes = @('localhost', '.local', '.localdomain', '.home.arpa', '.in-addr.arpa', '.ip6.arpa', '.lan')
 $computerName = $env:COMPUTERNAME.ToLowerInvariant()
 try {
-    $events = Get-WinEvent -FilterHashtable @{
-        LogName = 'Microsoft-Windows-DNS-Client/Operational'; Id = 3006; StartTime = $Since
-    } -ErrorAction Stop
+    $oldestEvent = Get-WinEvent -LogName $dnsLog -Oldest -MaxEvents 1 -ErrorAction Stop
+    if ($oldestEvent.TimeCreated -gt $Since) {
+        # The log wrapped: its default 1 MB fills in about a minute on a busy host.
+        $dnsStatus = "incomplete: log starts at $($oldestEvent.TimeCreated.ToString('s')), after the block was enabled (log too small?)"
+    }
+    $events = @(Get-WinEvent -FilterHashtable @{ LogName = $dnsLog; Id = 3006; StartTime = $Since } -ErrorAction SilentlyContinue)
     foreach ($event in $events) {
         $name = ([string]$event.Properties[0].Value).TrimEnd('.').ToLowerInvariant()
         if (-not $name) { continue }
         $isLocal = $name -eq $computerName -or $name -notmatch '\.' -or
             @($localSuffixes | Where-Object { $name -eq $_.TrimStart('.') -or $name.EndsWith($_) }).Count -gt 0
+        $owner = Resolve-ProcessOwner ([string]$event.ProcessId) $event.TimeCreated
         $queries.Add([pscustomobject]@{
             time = $event.TimeCreated.ToString('s')
             name = $name
             class = $(if ($isLocal) { 'local' } else { 'public' })
             case = Resolve-CaseId $event.TimeCreated
             pid = $event.ProcessId
-            process = Resolve-ProcessLabel ([string]$event.ProcessId)
+            process = $owner
+            bucket = Get-OwnerBucket $owner
         })
     }
 }
 catch {
-    if ($_.Exception.Message -match 'No events were found') { $dnsStatus = 'read (no events)' }
+    if ($_.Exception.Message -match 'No events were found') { $dnsStatus = 'incomplete: log has no events (logging not enabled?)' }
     else { $dnsStatus = "unavailable: $($_.Exception.Message)" }
+}
+
+function Get-ByProcess {
+    param($Items, [string]$Field)
+    return @($Items | Group-Object process | Sort-Object Count -Descending | ForEach-Object {
+        [pscustomobject]@{
+            process = $_.Name
+            count = $_.Count
+            cases = @($_.Group.case | Select-Object -Unique)
+            targets = @($_.Group.$Field | Select-Object -Unique | Select-Object -First 20)
+        }
+    })
 }
 
 $publicDrops = @($drops | Where-Object class -eq 'public')
 $publicQueries = @($queries | Where-Object class -eq 'public')
+$buckets = @{}
+foreach ($bucket in 'test', 'unattributed', 'host') {
+    $buckets[$bucket] = [pscustomobject]@{
+        drops = @($publicDrops | Where-Object bucket -eq $bucket)
+        queries = @($publicQueries | Where-Object bucket -eq $bucket)
+    }
+}
 
 $summary = [pscustomobject]@{
     collected_at = [DateTime]::UtcNow.ToString('o')
     since_local = $Since.ToString('o')
     firewall_log = $firewallStatus
     dns_log = $dnsStatus
-    public_drops = $publicDrops.Count
+    test_public_drops = $buckets.test.drops.Count
+    test_public_dns_queries = $buckets.test.queries.Count
+    unattributed_public_drops = $buckets.unattributed.drops.Count
+    unattributed_public_dns_queries = $buckets.unattributed.queries.Count
+    host_public_drops = $buckets.host.drops.Count
+    host_public_dns_queries = $buckets.host.queries.Count
     other_drops = $drops.Count - $publicDrops.Count
-    public_dns_queries = $publicQueries.Count
     public_events_by_case = @(@($publicDrops) + @($publicQueries) | Group-Object case |
         ForEach-Object { [pscustomobject]@{ case = $_.Name; count = $_.Count } })
-    public_drops_by_process = @($publicDrops | Group-Object process | Sort-Object Count -Descending |
-        ForEach-Object { [pscustomobject]@{ process = $_.Name; count = $_.Count; destinations = @($_.Group.destination | Select-Object -Unique) } })
-    public_dns_by_process = @($publicQueries | Group-Object process | Sort-Object Count -Descending |
-        ForEach-Object { [pscustomobject]@{ process = $_.Name; count = $_.Count; names = @($_.Group.name | Select-Object -Unique) } })
+    test_drops_by_process = Get-ByProcess $buckets.test.drops 'destination'
+    test_dns_by_process = Get-ByProcess $buckets.test.queries 'name'
+    unattributed_drops_by_process = Get-ByProcess $buckets.unattributed.drops 'destination'
+    unattributed_dns_by_process = Get-ByProcess $buckets.unattributed.queries 'name'
+    host_drops_by_process = Get-ByProcess $buckets.host.drops 'destination'
+    host_dns_by_process = Get-ByProcess $buckets.host.queries 'name'
 }
 
 Write-EvidenceJson -Path (Join-Path $EvidenceDirectory 'network-evidence.json') -InputObject $summary
 $drops | Export-Csv -LiteralPath (Join-Path $EvidenceDirectory 'firewall-drops.csv') -NoTypeInformation -Encoding utf8
 $queries | Export-Csv -LiteralPath (Join-Path $EvidenceDirectory 'dns-queries.csv') -NoTypeInformation -Encoding utf8
 
-Write-Host "Network evidence since $($Since.ToString('s')): firewall log $firewallStatus; DNS log $dnsStatus."
-Write-Host "Public-destination drops: $($publicDrops.Count); other drops: $($drops.Count - $publicDrops.Count); public-name DNS queries: $($publicQueries.Count)."
-foreach ($entry in $summary.public_drops_by_process) { Write-Host "  DROP  $($entry.count)x $($entry.process) -> $($entry.destinations -join ', ')" }
-foreach ($entry in $summary.public_dns_by_process) { Write-Host "  DNS   $($entry.count)x $($entry.process) -> $($entry.names -join ', ')" }
+Write-Host "Network evidence since $($Since.ToString('s'))"
+Write-Host "  firewall log: $firewallStatus"
+Write-Host "  DNS log:      $dnsStatus"
+Write-Host "Hermes/test processes:  $($buckets.test.drops.Count) public drops, $($buckets.test.queries.Count) public DNS queries"
+foreach ($entry in @($summary.test_drops_by_process) + @($summary.test_dns_by_process)) {
+    Write-Host "  FINDING $($entry.count)x $($entry.process) [$($entry.cases -join ',')] -> $($entry.targets -join ', ')" -ForegroundColor Red
+}
+Write-Host "Unattributed PIDs:      $($buckets.unattributed.drops.Count) public drops, $($buckets.unattributed.queries.Count) public DNS queries (review by hand)"
+foreach ($entry in @($summary.unattributed_drops_by_process) + @($summary.unattributed_dns_by_process) | Select-Object -First 10) {
+    Write-Host "  review  $($entry.count)x $($entry.process) [$($entry.cases -join ',')] -> $($entry.targets -join ', ')"
+}
+Write-Host "Host background:        $($buckets.host.drops.Count) public drops, $($buckets.host.queries.Count) public DNS queries (Windows/Azure; blocked, not findings)"
+foreach ($entry in @($summary.host_drops_by_process) + @($summary.host_dns_by_process) | Sort-Object count -Descending | Select-Object -First 8) {
+    Write-Host "  host    $($entry.count)x $($entry.process)"
+}
 
-$incomplete = $firewallStatus -ne 'read' -or $dnsStatus -like 'unavailable*'
-if ($FailOnFindings -and ($publicDrops.Count -gt 0 -or $publicQueries.Count -gt 0 -or $incomplete)) {
-    if ($incomplete) { Write-Host 'FAIL: evidence is incomplete, so "no attempts" cannot be claimed.' -ForegroundColor Red }
+$incomplete = $firewallStatus -ne 'read' -or $dnsStatus -ne 'read'
+if ($incomplete) {
+    Write-Host 'Evidence is INCOMPLETE: a log does not cover the whole window, so "no attempts" cannot be claimed.' -ForegroundColor Red
+}
+if ($FailOnFindings -and ($buckets.test.drops.Count -gt 0 -or $buckets.test.queries.Count -gt 0 -or $incomplete)) {
     exit 1
 }
 exit 0

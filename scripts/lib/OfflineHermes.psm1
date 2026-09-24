@@ -183,6 +183,8 @@ function Get-OfflineNetworkGuard {
         electron_config_cache = (Join-Path $CacheRoot 'electron')
         ELECTRON_BUILDER_CACHE = (Join-Path $CacheRoot 'electron-builder')
         PIP_NO_INDEX = '1'
+        # Keep pip out of the user-level %LOCALAPPDATA%\pip cache.
+        PIP_NO_CACHE_DIR = '1'
         UV_OFFLINE = '1'
         HERMES_DISABLE_LAZY_INSTALLS = '1'
     }

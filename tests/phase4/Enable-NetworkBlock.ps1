@@ -115,7 +115,17 @@ Write-EvidenceJson -Path $statePath -InputObject $state
 
 # 6. Start evidence logs clean. The firewall log is filtered by enabled_at
 #    because the firewall service keeps pfirewall.log open.
-& wevtutil.exe sl 'Microsoft-Windows-DNS-Client/Operational' /e:true | Out-Null
+# The DNS client log defaults to 1 MB, which a busy host fills in about a
+# minute; the first Azure run lost every test-window event that way. 512 MB
+# holds many hours. Collect-NetworkEvidence.ps1 flags any log that still wraps.
+$dnsLog = 'Microsoft-Windows-DNS-Client/Operational'
+& wevtutil.exe sl $dnsLog /e:false | Out-Null
+& wevtutil.exe sl $dnsLog /ms:536870912 /rt:false | Out-Null
+& wevtutil.exe sl $dnsLog /e:true | Out-Null
+$dnsLogConfig = (& wevtutil.exe gl $dnsLog) -join "`n"
+if ($dnsLogConfig -notmatch 'enabled:\s*true' -or $dnsLogConfig -notmatch 'maxSize:\s*536870912') {
+    Write-Warning "Could not enable/resize $dnsLog; DNS evidence may be incomplete.`n$dnsLogConfig"
+}
 & wevtutil.exe cl 'Microsoft-Windows-DNS-Client/Operational' | Out-Null
 & ipconfig.exe /flushdns | Out-Null
 

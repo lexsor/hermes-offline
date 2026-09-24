@@ -62,6 +62,15 @@ if rg -n -e 'Start-ThreadJob|SkipHttpErrorCheck|ForEach-Object -Parallel|AsHasht
   echo 'PowerShell 7-only feature used; the offline target has Windows PowerShell 5.1.' >&2
   exit 1
 fi
+# Evidence completeness (first Azure run: the 1 MB DNS log wrapped and lost
+# every test-window event while the collector still reported "read").
+rg -q '/ms:536870912' "$harness/Enable-NetworkBlock.ps1"
+rg -q -- '-Oldest -MaxEvents 1' "$harness/Collect-NetworkEvidence.ps1"
+rg -q 'firewallOldest -gt \$Since' "$harness/Collect-NetworkEvidence.ps1"
+# PIDs are resolved per event time, not joined across reuse.
+rg -q 'Resolve-ProcessOwner' "$harness/Collect-NetworkEvidence.ps1"
+rg -q "PIP_NO_CACHE_DIR" "$repo_root/scripts/lib/OfflineHermes.psm1"
+
 # The firewall service holds pfirewall.log open for writing; it must be read
 # with ReadWrite sharing (File.ReadLines failed on the first VM run).
 if rg -n 'ReadLines\(\$FirewallLogPath' "$harness/Collect-NetworkEvidence.ps1"; then
