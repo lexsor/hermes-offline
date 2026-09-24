@@ -62,6 +62,13 @@ if rg -n -e 'Start-ThreadJob|SkipHttpErrorCheck|ForEach-Object -Parallel|AsHasht
   echo 'PowerShell 7-only feature used; the offline target has Windows PowerShell 5.1.' >&2
   exit 1
 fi
+# The firewall service holds pfirewall.log open for writing; it must be read
+# with ReadWrite sharing (File.ReadLines failed on the first VM run).
+if rg -n 'ReadLines\(\$FirewallLogPath' "$harness/Collect-NetworkEvidence.ps1"; then
+  echo 'Collect-NetworkEvidence.ps1 reads pfirewall.log without ReadWrite sharing.' >&2
+  exit 1
+fi
+
 # 5.1's ConvertFrom-Json emits a JSON array as one pipeline object; assign it
 # to a variable before iterating (broke evidence collection on the first VM run).
 if rg -n 'ConvertFrom-Json *\| *(ForEach-Object|Where-Object|%|\?)' --glob '*.ps1' --glob '*.psm1' "$harness" "$repo_root/scripts"; then

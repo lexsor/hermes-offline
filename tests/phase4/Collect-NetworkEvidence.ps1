@@ -85,9 +85,15 @@ function Get-DestinationClass {
 # --- Firewall drops -------------------------------------------------------
 $drops = [System.Collections.Generic.List[object]]::new()
 $firewallStatus = 'read'
+$reader = $null
 try {
     $fields = $null
-    foreach ($line in [System.IO.File]::ReadLines($FirewallLogPath)) {
+    # The firewall service keeps pfirewall.log open for writing; File.ReadLines
+    # asks for exclusive read access and fails, so open it with ReadWrite sharing.
+    $stream = [System.IO.FileStream]::new($FirewallLogPath, [System.IO.FileMode]::Open,
+        [System.IO.FileAccess]::Read, [System.IO.FileShare]'ReadWrite, Delete')
+    $reader = [System.IO.StreamReader]::new($stream)
+    while ($null -ne ($line = $reader.ReadLine())) {
         if ($line.StartsWith('#Fields:')) { $fields = $line.Substring(8).Trim() -split '\s+'; continue }
         if (-not $fields -or $line.StartsWith('#') -or -not $line.Trim()) { continue }
         $values = $line -split '\s+'
@@ -114,6 +120,12 @@ catch [System.UnauthorizedAccessException] {
 }
 catch [System.IO.FileNotFoundException] {
     $firewallStatus = 'missing (dropped-packet logging not enabled?)'
+}
+catch [System.IO.IOException] {
+    $firewallStatus = "unreadable: $($_.Exception.Message)"
+}
+finally {
+    if ($reader) { $reader.Dispose() }
 }
 
 # --- DNS client queries ---------------------------------------------------
