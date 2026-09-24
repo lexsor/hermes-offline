@@ -18,11 +18,11 @@ Every dependency needed to install it ships in this repository as a pinned, chec
 | 1. Discovery | Done. Reports in [`reports/`](reports/) |
 | 2. Vendoring | Done. Artifacts in `vendor/`, manifests in `manifests/` |
 | 3. Offline installer | Done, and run on native Windows 11 x64 under both Windows PowerShell 5.1 and PowerShell 7. See [`reports/phase-3-native-windows-run.md`](reports/phase-3-native-windows-run.md) |
-| 4. Network-blocked validation | Harness built and dry-run on a connected host. **The clean, network-blocked run has not been done yet.** See [`docs/phase-4-validation-plan.md`](docs/phase-4-validation-plan.md) |
+| 4. Network-blocked validation | Done on a clean Azure Windows 11 VM with outbound networking blocked: install, reinstall, rollback, CLI and desktop chats pass, with no public network attempt by Hermes. See [`reports/offline-install-test.md`](reports/offline-install-test.md), [`reports/offline-runtime-smoke-test.md`](reports/offline-runtime-smoke-test.md), [`reports/checksum-verification.md`](reports/checksum-verification.md) and the gaps in [`reports/final-gap-list.md`](reports/final-gap-list.md) |
 | 5. Distribution | Not started |
 | 6. Upstream maintenance | Not started |
 
-Offline support is **not yet proven**. That claim waits for the Phase 4 run on a clean machine with outbound networking blocked.
+Offline install and runtime are **validated for this profile** on Windows 11 x64 (Phase 4). Before any release: Phase 5 (distribution) and Phase 6 (upstream update workflow), plus the release-blocking gaps G1, G2, G7 and G11 in the gap list.
 
 ## Getting the repository onto an offline machine
 
@@ -75,7 +75,7 @@ Features outside the profile report as unavailable instead of being downloaded. 
 
 ## Known issues
 
-- **Opening `app\Hermes.exe` directly** (instead of `launch-hermes.cmd`) will probably fall back to upstream's networked first-run installer, or attach to another Hermes install on the machine. Phase 4 case T8 tests this.
+- **Opening `app\Hermes.exe` directly** (instead of `launch-hermes.cmd`) runs without the offline home: the app shows "Hermes couldn't start", writes to `%LOCALAPPDATA%\hermes`, and offers a *Repair install* that would run upstream's networked installer (gaps G1 and G2).
 - **`scripts\build-bundle.ps1`** zips an installed tree whose paths are fixed to a temporary folder, so the archive does not work anywhere else yet. A Phase 5 fix.
 - **Redistribution:** a human legal review is required before public redistribution; see [`reports/license-redistribution-review.md`](reports/license-redistribution-review.md) and the policy in [`manifests/licenses.lock`](manifests/licenses.lock).
 
@@ -102,7 +102,7 @@ manifests/              per-kind locks, licenses.lock, checksums.sha256 (the ins
 scripts/                verify-deps, install-offline, verify-offline, bootstrap, build-bundle (.ps1, plus .sh shims)
 config/                 example Hermes, provider, Honcho and MCP configuration (no secrets)
 docs/                   install, configuration, and Phase 4 plan and runbook
-reports/                Phase 1 discovery reports and Phase 3 run results
+reports/                Phase 1 discovery, Phase 3 run results, and Phase 4 validation reports and gap list
 tests/phase3/           installer static checks
 tests/phase4/           network-blocked validation harness
 ```
