@@ -111,7 +111,25 @@ The first command must report `Public-destination drops: 0` and `public-name DNS
 
 ## 6. Get the evidence out, still offline
 
-Reconnect RDP with **Local Resources → More → Drives** ticked, then copy the run folder to `\\tsclient\C\...` on your machine. That goes over the RDP channel, not the VM's network. Send me the folder, or `summary.md` and `network-evidence.json` at minimum, and I'll write the four Phase 4 reports from it.
+**Direct RDP:** reconnect with **Local Resources → More → Drives** ticked, then copy the run folder to `\\tsclient\C\...` on your machine. That goes over the RDP connection, not the VM's network.
+
+**Azure Bastion, Standard or Premium tier:** the browser session cannot share drives, but your own Remote Desktop client can, through a Bastion tunnel.
+1. Tick Bastion → Configuration → **Native client support** once. Or run `az network bastion update --name <bastion> --resource-group <rg> --enable-tunneling true`.
+2. On your laptop (Azure CLI, `az extension add --name bastion`):
+   ```bash
+   az network bastion tunnel --name <bastion> --resource-group <rg> --target-resource-id <vm-resource-id> --resource-port 3389 --port 55000
+   ```
+3. Connect `mstsc` to `localhost:55000` with Drives → C: ticked, then copy to `\\tsclient\C\...` as above. The block and NSG stay in place.
+
+**Azure Bastion, Basic or Developer tier (browser only, text clipboard):**
+- During testing, open `summary.md`, `network-evidence.json` and any failing `<case>.log` in Notepad, and paste their text out.
+- For the full folder, wait until sections 3–5 are **complete**, because the evidence is captured by then:
+  1. Zip it: `Compress-Archive <run folder> C:\phase4-evidence.zip`.
+  2. Restore connectivity (section 7).
+  3. Upload the zip from the VM, for example to a storage account container through the portal.
+  4. Swap the OS disk back to the snapshot before any rerun, since the host is no longer clean.
+
+Send me the folder, or `summary.md` and `network-evidence.json` at minimum, and I'll write the four Phase 4 reports from it.
 
 ## 7. Reset or finish
 
