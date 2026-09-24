@@ -27,6 +27,7 @@ Launch with `launch-hermes.cmd`; run the CLI with `hermes-offline.cmd`. Both lau
 | Patch | Why |
 |---|---|
 | `0001-desktop-no-remote-theme-fonts.patch` | The desktop's default theme injects a Google Fonts stylesheet on every start (the Phase 4 Azure run recorded the blocked DNS attempts from `Hermes.exe`). Remote theme fonts are no longer injected; every theme's font stack falls back to system fonts. |
+| `0002-desktop-offline-profile-no-network-installer.patch` | Opening `app\Hermes.exe` directly used to bypass the launcher: the app ignored the offline home, wrote to `%LOCALAPPDATA%\hermes`, could attach to an online Hermes install, and offered *Install Hermes locally* / *Repair install*, which run upstream's networked installer. It also shared `%APPDATA%\Hermes` with any online Hermes Desktop. The desktop now applies the launcher's environment itself whenever `install-state.json` sits beside the app folder, keeps its Electron user data in `<offline home>\desktop-user-data`, skips the first-run install choice, makes *Repair install* a plain backend restart, and refuses the networked installer with an instruction to repair offline with `install-offline.ps1 -Force`. |
 
 ## Explicit limitations
 

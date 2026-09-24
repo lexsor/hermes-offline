@@ -6,7 +6,7 @@ Every dependency needed to install it ships in this repository as a pinned, chec
 
 | | |
 |---|---|
-| Upstream | `NousResearch/hermes-agent` at `bc655bf` (Hermes Agent v0.21.3), stored unmodified; see [`manifests/upstream.lock`](manifests/upstream.lock). One offline patch is applied at install time; see [`manifests/patches.lock`](manifests/patches.lock) |
+| Upstream | `NousResearch/hermes-agent` at `bc655bf` (Hermes Agent v0.21.3), stored unmodified; see [`manifests/upstream.lock`](manifests/upstream.lock). Two offline patches are applied at install time; see [`manifests/patches.lock`](manifests/patches.lock) |
 | Profile | `windows-x64-desktop`: Windows 10/11 x64, CPython 3.11.16, Node 26.9.0, Electron 40.10.2 |
 | Vendored | 1,110 checksummed files: 68 Python wheels, 1,027 npm tarballs, 10 runtime/tool binaries, the Electron runtime, 3 source archives |
 | Host requirement | Windows PowerShell 5.1, which ships with Windows. Nothing else. |
@@ -22,7 +22,7 @@ Every dependency needed to install it ships in this repository as a pinned, chec
 | 5. Distribution | Not started |
 | 6. Upstream maintenance | Not started |
 
-Offline install and runtime are **validated for this profile** on Windows 11 x64 (Phase 4). Before any release: Phase 5 (distribution) and Phase 6 (upstream update workflow), plus the release-blocking gaps G1, G2, G7 and G11 in the gap list.
+Offline install and runtime are **validated for this profile** on Windows 11 x64 (Phase 4). Before any release: Phase 5 (distribution) and Phase 6 (upstream update workflow), plus the release-blocking gaps G7 and G11 in the gap list (G1/G2 are fixed pending a VM re-check).
 
 ## Getting the repository onto an offline machine
 
@@ -75,7 +75,7 @@ Features outside the profile report as unavailable instead of being downloaded. 
 
 ## Known issues
 
-- **Opening `app\Hermes.exe` directly** (instead of `launch-hermes.cmd`) runs without the offline home: the app shows "Hermes couldn't start", writes to `%LOCALAPPDATA%\hermes`, and offers a *Repair install* that would run upstream's networked installer (gaps G1 and G2).
+- **Opening `app\Hermes.exe` directly** now behaves like `launch-hermes.cmd` (patch 0002): offline home, offline backend, and its own Electron user data, so it can run alongside an online Hermes Desktop. The in-app installer and *Repair install* never download; a broken install is repaired with `scripts\install-offline.ps1 -Force`.
 - **`scripts\build-bundle.ps1`** zips an installed tree whose paths are fixed to a temporary folder, so the archive does not work anywhere else yet. A Phase 5 fix.
 - **Redistribution:** a human legal review is required before public redistribution; see [`reports/license-redistribution-review.md`](reports/license-redistribution-review.md) and the policy in [`manifests/licenses.lock`](manifests/licenses.lock).
 

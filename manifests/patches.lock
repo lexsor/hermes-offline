@@ -1,7 +1,7 @@
 format_version = 1
 profile = "windows-x64-desktop"
 upstream_commit = "bc655bfb40ff7414bbec9dd179b17cf41e2f60ba"
-patch_count = 1
+patch_count = 2
 applied_by = "scripts/install-offline.ps1, to the staged copy of upstream/hermes-agent (upstream/ itself is never modified)"
 
 [[patch]]
@@ -9,3 +9,9 @@ path = "patches/0001-desktop-no-remote-theme-fonts.patch"
 sha256 = "340e40f3909b85e505ac438fe0dfa8c6ceb0044ac892745d97754b452ef24347"
 target = "apps/desktop/src/themes/context.tsx"
 reason = "The default desktop theme injects a Google Fonts stylesheet at every start; Phase 4 T7 recorded the blocked DNS attempts from Hermes.exe. Remote theme fonts are never injected; theme font stacks fall back to system fonts."
+
+[[patch]]
+path = "patches/0002-desktop-offline-profile-no-network-installer.patch"
+sha256 = "1b303c07d8bacd61e1877ea1768be5ace16a3387caa449b39ec8dce0ba35ca67"
+target = "apps/desktop/electron/entry.ts, apps/desktop/electron/main.ts, apps/desktop/electron/offline-profile.ts (new)"
+reason = "Gaps G1/G2 from Phase 4: a direct launch of Hermes.exe ran without the offline HERMES_HOME (wrote to the default hermes folder under LOCALAPPDATA, could attach to an online install), and Repair install / Install Hermes locally started upstream's networked installer. The desktop now applies the offline profile itself when install-state.json is beside it, gives Electron its own user-data folder inside the offline home (it shared the online app user-data folder with any online Hermes Desktop, including the single-instance lock), skips the first-run install choice, and refuses the networked installer with an offline repair instruction."

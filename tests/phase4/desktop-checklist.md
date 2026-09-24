@@ -39,24 +39,34 @@ Keep this window open. Anything launched from it inherits `OFFLINE_HERMES_HOME`.
 
 **Pass:** both chats answered, the backend path is correct, and the update panel shows the not-a-git-checkout message. No public-network events in the T7 window.
 
-## T8: desktop launched directly (expected gap)
+## T8: desktop launched directly
 
 1. Open a **new** Explorer window. Do not use the setup PowerShell, whose environment would leak into the app.
 2. Double-click `%LOCALAPPDATA%\OfflineHermes\app\Hermes.exe`.
-3. Record what happens: the boot screen text, any "installing" or "setting up" progress, and error dialogs. Take screenshots.
-4. Watch for installer children: `Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'powershell|pwsh|git|python|uv|pip' } | Select-Object ProcessId, Name, CommandLine`.
-5. Close the app. If a bootstrap started, let it fail, and note whether it left files in `%LOCALAPPDATA%\hermes`.
+3. Record what happens and take screenshots. Save the process listing: `Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -match 'OfflineHermes|\\hermes\\' } | Select-Object ProcessId, ExecutablePath, CommandLine | Format-List`.
+4. Close the app, and list `%LOCALAPPDATA%\hermes` if it exists.
 
-**Pass:** a clear offline or unavailable error with no install attempt.
-**Expected actual behavior:** upstream's first-run bootstrap starts, because without the launcher `HERMES_HOME` and `HERMES_DESKTOP_HERMES` are unset (`resolveHermesBackend` in `apps/desktop/electron/main.ts`). Record it as a gap with the observed behavior.
+**Pass (patch 0002):**
+- The app starts like the launcher, with its backend under `%LOCALAPPDATA%\OfflineHermes\venv`.
+- The home is the recorded offline home.
+- No process runs from `%LOCALAPPDATA%\hermes`, and nothing new appears there.
+- No install attempt and no public network events.
 
-## T9: backend unavailable (expected gap)
+Before patch 0002 (Phase 4 runs 1–3), a direct launch ran without the offline environment: "Hermes couldn't start" with *Repair install*, and files written to `%LOCALAPPDATA%\hermes` (gaps G1/G2).
 
-1. `Rename-Item "$install\venv\Scripts\hermes.exe" hermes.exe.phase4-disabled`
-2. From the setup window, launch through `launch-hermes.cmd`. Record the behavior as in T8, steps 3–5.
-3. Restore: `Rename-Item "$install\venv\Scripts\hermes.exe.phase4-disabled" hermes.exe`, then rerun `.\scripts\verify-offline.ps1`.
+## T9: backend unavailable
 
-**Pass:** a visible failure with no `install.ps1`, `git clone`, `pip` or `uv` process.
+The desktop starts its backend with the venv's Python, so disable the whole venv. Renaming `hermes.exe` isn't enough.
+
+1. `Rename-Item "$install\venv" venv.phase4-disabled`
+2. From the setup window, launch through `launch-hermes.cmd`, and record the behavior as in T8. Optionally click *Repair install* once.
+3. Watch for installer children: `Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'powershell|pwsh|git|python|uv|pip|curl' } | Select-Object ProcessId, Name, CommandLine`.
+4. Restore: `Rename-Item "$install\venv.phase4-disabled" venv`, then rerun `.\scripts\verify-offline.ps1`.
+
+**Pass (patch 0002):**
+- A visible failure saying the Offline Hermes install can't start its backend and should be repaired offline with `scripts/install-offline.ps1 -Force`.
+- *Repair install* only restarts the backend and shows the same message.
+- No `install.ps1`, `git clone`, `pip`, `uv` or `curl` process.
 
 ## T10: lifecycle
 

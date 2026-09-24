@@ -100,7 +100,7 @@ Mark 'T7 start'; cmd /c "$install\launch-hermes.cmd"
    Mark 'T7 end'
    ```
 
-### T8: `Hermes.exe` opened directly (expected gap)
+### T8: `Hermes.exe` opened directly
 
 ```powershell
 Get-Process Hermes -ErrorAction SilentlyContinue    # must print nothing
@@ -108,7 +108,10 @@ Mark 'T8 start'
 ```
 
 1. Open `C:\Users\azureuser\AppData\Local\OfflineHermes\app\` **in Explorer** and double-click `Hermes.exe`.
-2. Wait a minute. **Don't click anything.** Screenshot it as `$evidence\T8-screen.png`.
+2. Wait a minute. With patch 0002 the app should start normally, using the offline home and the offline backend, exactly as through the launcher. That home has no provider configured, so the app may ask for one; don't configure it. Screenshot it as `$evidence\T8-screen.png`, and save a process listing:
+   ```powershell
+   Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -match 'OfflineHermes|\\hermes\\' } | Select-Object ProcessId, ExecutablePath, CommandLine | Format-List | Out-File "$evidence\T8-processes.txt"
+   ```
 3. Close the window, then:
    ```powershell
    Mark 'T8 end'
@@ -116,6 +119,8 @@ Mark 'T8 start'
    ```
 
 ### T9: backend unavailable
+
+With patch 0002, expect the app to show this Offline Hermes install can't start its backend and should be repaired offline with `scripts/install-offline.ps1 -Force`, and **not** offer to download Hermes. Clicking *Repair install* here should only restart the backend and show the same message.
 
 The desktop app starts its backend with the venv's Python (`venv\Scripts\python.exe -m hermes_cli.main serve`), so disabling the whole venv is the real test. Renaming `hermes.exe` isn't.
 
@@ -227,12 +232,9 @@ Get-ChildItem $env:LOCALAPPDATA -Directory -Filter 'OfflineHermes.previous-*' | 
 "T10c end $(Get-Date -Format o)" | Add-Content "$run\manual\timeline.txt"
 ```
 
-Expected leftovers:
-- `%APPDATA%\Hermes`: the desktop app's user data.
-- `%LOCALAPPDATA%\hermes`: created by the T8 direct launch.
-- `%TEMP%\phase4-test-home`.
+Expected leftovers with patch 0002: only `%TEMP%\phase4-test-home`, the harness's mock home. The desktop's Electron user data is now inside each Hermes home (`desktop-user-data\`), so it's removed with the home.
 
-Anything else is a finding.
+Before patch 0002, runs also left `%APPDATA%\Hermes` and, after a T8 direct launch, `%LOCALAPPDATA%\hermes`. Either of those appearing now is a finding, as is anything else.
 
 ```powershell
 # elevated

@@ -1,0 +1,137 @@
+diff --git a/apps/desktop/electron/entry.ts b/apps/desktop/electron/entry.ts
+index 3830b95..73a7199 100644
+--- a/apps/desktop/electron/entry.ts
++++ b/apps/desktop/electron/entry.ts
+@@ -2,6 +2,7 @@ import { app } from 'electron'
+ 
+ import { wslgLaunchArgs } from './wslg-launch'
+ import { spawnWslgLaunch } from './wslg-launch-process'
++import { applyOfflineProfile } from './offline-profile'
+ 
+ const args = wslgLaunchArgs(process.argv.slice(1), process.env, process.platform)
+ 
+@@ -22,5 +23,8 @@ if (args) {
+     process.once(signal, () => child.kill(signal))
+   }
+ } else {
++  // Offline Hermes (patch 0002): apply the offline install's environment
++  // before main reads HERMES_HOME, PATH or any backend override.
++  applyOfflineProfile()
+   await import('./main')
+ }
+diff --git a/apps/desktop/electron/main.ts b/apps/desktop/electron/main.ts
+index 037e7de..cee8997 100644
+--- a/apps/desktop/electron/main.ts
++++ b/apps/desktop/electron/main.ts
+@@ -2350,6 +2350,13 @@ function getFirstRunSetupGate() {
+ }
+ 
+ async function waitForFirstRunSetupChoice(backend) {
++  // Offline Hermes (patch 0002): the install is already local, so skip the
++  // "Connect / Install Hermes locally" choice; the bootstrap-needed guard then
++  // explains how to repair the install offline instead of offering a download.
++  if (process.env.OFFLINE_HERMES_INSTALL_ROOT) {
++    return 'continue-local'
++  }
++
+   const gate = getFirstRunSetupGate()
+ 
+   if (!gate.shouldGate(backend)) {
+@@ -5480,6 +5487,21 @@ async function runEnsureRuntime(backend: any, assertStillOwned: () => void): Pro
+   // will rewire startup to spawn the window first and route bootstrap events
+   // to a renderer-side install overlay.
+   if (backend.kind === 'bootstrap-needed') {
++    // Offline Hermes (patch 0002): never run upstream's networked installer
++    // (first-run install, Repair install, or the Hermes Setup hand-off).
++    if (process.env.OFFLINE_HERMES_INSTALL_ROOT) {
++      rememberLog('[bootstrap] offline install: refusing the networked installer')
++      bootstrapRepairRequested = false
++      const offlineError: Error & { isBootstrapFailure?: boolean } = new Error(
++        'This Offline Hermes install cannot start its backend, and the in-app installer is disabled because it ' +
++          'downloads Hermes. Repair it offline by running scripts/install-offline.ps1 -Force from the Offline Hermes ' +
++          `repository. Details: no usable Hermes backend under ${process.env.OFFLINE_HERMES_INSTALL_ROOT}.`
++      )
++      offlineError.isBootstrapFailure = true
++      bootstrapFailure = offlineError
++      throw offlineError
++    }
++
+     rememberLog('[bootstrap] no Hermes install found; starting first-launch bootstrap')
+ 
+     if (await handOffWindowsBootstrapRecovery('bootstrap-needed')) {
+@@ -15718,7 +15740,10 @@ ipcMain.handle('hermes:bootstrap:repair', async () => {
+   // to the normal restart branch, which just kills the current child
+   // and respawns it against the same venv. See #74874 — this is what
+   // breaks the infinite reinstall loop the user hit.
+-  bootstrapRepairRequested = repairDecision.hardReinstall
++  // Offline Hermes (patch 0002): repair never reinstalls from the network;
++  // it restarts the backend, and a genuinely broken install reports how to
++  // repair it offline (see the bootstrap-needed guard).
++  bootstrapRepairRequested = process.env.OFFLINE_HERMES_INSTALL_ROOT ? false : repairDecision.hardReinstall
+   bootstrapFailure = null
+   backendStartFailure = null
+   remoteReauthFailure = null
+diff --git a/apps/desktop/electron/offline-profile.ts b/apps/desktop/electron/offline-profile.ts
+new file mode 100644
+index 0000000..6d15f94
+--- /dev/null
++++ b/apps/desktop/electron/offline-profile.ts
+@@ -0,0 +1,58 @@
++// Offline Hermes (patch 0002): make a direct launch of Hermes.exe behave like
++// launch-hermes.cmd. When this app sits inside an Offline Hermes install
++// (<root>\app\Hermes.exe beside <root>\install-state.json), apply the
++// launcher's environment before anything reads it, and mark the process as
++// offline so main.ts refuses the networked first-run/repair installer.
++import fs from 'node:fs'
++import path from 'node:path'
++
++interface OfflineInstallState {
++  profile?: string
++  hermes_home?: string
++}
++
++export function applyOfflineProfile(execPath: string = process.execPath, env: NodeJS.ProcessEnv = process.env): string | null {
++  const installRoot = path.dirname(path.dirname(execPath))
++  let state: OfflineInstallState | null = null
++
++  try {
++    let raw = fs.readFileSync(path.join(installRoot, 'install-state.json'), 'utf8')
++    // Windows PowerShell 5.1 writes install-state.json with a UTF-8 BOM.
++    if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1)
++    state = JSON.parse(raw) as OfflineInstallState
++  } catch {
++    return null
++  }
++
++  if (!state || state.profile !== 'windows-x64-desktop' || !state.hermes_home) {
++    return null
++  }
++
++  env.OFFLINE_HERMES_INSTALL_ROOT = installRoot
++  // Same precedence as launch-hermes.cmd: OFFLINE_HERMES_HOME, else the home
++  // recorded at install time. Never a host-wide HERMES_HOME of an online install.
++  env.HERMES_HOME = env.OFFLINE_HERMES_HOME || state.hermes_home
++  // Electron's own user data (local storage, caches, desktop settings, and the
++  // single-instance lock) lives beside the offline home instead of the
++  // %APPDATA%\Hermes shared with any online Hermes Desktop build. main.ts
++  // applies HERMES_DESKTOP_USER_DATA_DIR before taking the instance lock.
++  env.HERMES_DESKTOP_USER_DATA_DIR = env.HERMES_DESKTOP_USER_DATA_DIR || path.join(env.HERMES_HOME, 'desktop-user-data')
++  env.HERMES_DESKTOP_HERMES = path.join(installRoot, 'venv', 'Scripts', 'hermes.exe')
++  env.HERMES_DISABLE_LAZY_INSTALLS = '1'
++  env.UV_OFFLINE = '1'
++  env.PIP_NO_INDEX = '1'
++
++  const runtimeDirs = [
++    path.join(installRoot, 'runtime', 'node'),
++    path.join(installRoot, 'runtime', 'git', 'cmd'),
++    path.join(installRoot, 'runtime', 'ripgrep'),
++    path.join(installRoot, 'venv', 'Scripts')
++  ]
++  const currentPath = env.PATH ?? ''
++
++  if (!currentPath.toLowerCase().includes(runtimeDirs[0].toLowerCase())) {
++    env.PATH = [...runtimeDirs, currentPath].filter(Boolean).join(path.delimiter)
++  }
++
++  return installRoot
++}
