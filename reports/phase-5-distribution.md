@@ -43,9 +43,23 @@ Windows 11 Pro 26200, Windows PowerShell 5.1 for all scripts. The build used `-A
 | Uninstall `-RemoveBackups` on a mock install with a `.previous-*` backup and a `.staging-*` folder | Removed all three. |
 | `tests/phase3/static-checks.sh`, `tests/phase4/static-checks.sh`, Windows PowerShell 5.1 parse of every changed script | Pass |
 
+## First release build
+
+Built on 2026-09-25 from commit `633db51` with a clean tree (no `-AllowDirtyTree`; `uncommitted_changes` is empty in the manifest).
+
+| | |
+|---|---|
+| Release version | `0.21.3-offline.633db51` |
+| Archive | `OfflineHermes-0.21.3-offline.633db51-windows-x64-desktop.zip` (616,306,736 bytes) |
+| SHA-256 | `db89204c4b5b98982a95518859d44dfa9af8921d6bccfedf3b8ffc12cdd63f14` |
+| Contents | 15,888 release files, 1,110 vendored artifacts, 2 patches |
+| Check | Extracted with `tar.exe -xf`; the archive's own `verify-release.ps1` (15,888 files) and `verify-deps.ps1` (1,110 files) pass. |
+
+This hash identifies the archive for the VM recheck. It is recorded here, in the repository, so it does not by itself authenticate the file for recipients: publish it through a channel they trust.
+
 ## Still to do before the release is public
 
-1. **Build the release from a committed tree** and record its `.sha256`, now without `-AllowDirtyTree`.
+1. ~~Build the release from a committed tree.~~ Done: see "First release build".
 2. **Network-blocked recheck from the release archive** on the Azure VM. Stage the zip in place of the working-tree export, run `verify-release`, then install, then T6/T7, then `uninstall-offline` (T10c, gap G6), with the same evidence collection.
 3. **The release gates** in `RELEASE_NOTES.md`: legal review (G11), the full upstream secret-hit review (G16), a standard-user run (G8), and Windows 10 or a narrowed claim (G14).
 4. **Phase 6**, the upstream update workflow.
