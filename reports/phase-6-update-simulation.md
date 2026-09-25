@@ -50,7 +50,7 @@ The newest lockfile-changing upstream commits before the 2026-09-24 "bundles & u
 6. **Checks:** `ohmaint.py check` (68 wheels, 1,029 tarballs); `tests/phase3`, `phase4` and `phase6` static checks; `verify-deps.sh` and `verify-deps.ps1` (1,112 files).
 7. **Offline install** from the refreshed tree into a new location: pass in 15 minutes, with all three patches applied. `verify-offline`: **Hermes Agent v0.21.5**, Python 3.11.16, pass. `uninstall-offline.ps1 -RemoveHermesHome -RemoveBackups` then removed the install and the home.
 
-The branch `upstream-update/f97608f178` (commit `e888336`) holds the complete refreshed state in the local worktree. It is not pushed.
+The simulation branch `upstream-update/f97608f178` (commit `e888336`) was never pushed. It was deleted with the worktree after the run; this report, the linked surface and refresh reports, and the appendix preserve what it contained.
 
 ## Findings folded back into the tooling
 
