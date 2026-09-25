@@ -3,6 +3,9 @@
 *.staging-*
 *.previous-*
 
+# Upstream clone used by the Phase 6 maintenance scripts.
+/.maintenance/
+
 # Secrets and user-owned configuration.
 .env
 config/*.local.*
@@ -12,3 +15,6 @@ config/secrets.*
 # Review it, then summarize into reports/; do not commit it wholesale.
 /phase4-evidence/
 /reports/evidence/
+
+# Python bytecode from the maintenance tool.
+__pycache__/

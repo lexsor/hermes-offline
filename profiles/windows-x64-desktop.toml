@@ -1,0 +1,129 @@
+# Selection rules for the windows-x64-desktop profile.
+#
+# scripts/maintenance/ohmaint.py computes the vendored Python and npm closures
+# from upstream's uv.lock and package-lock.json with these rules. Running it
+# against the pinned upstream must reproduce manifests/python.lock and
+# manifests/node.lock exactly (`ohmaint.py check`). Change a rule here, not
+# in the manifests, and record why.
+format = 1
+profile = "windows-x64-desktop"
+
+[python]
+vendor_dir = "vendor/python/windows-x64-cp311"
+# The interpreter the install runs (vendor/binaries cpython 3.11.16, AMD64).
+python_version = [3, 11]
+platforms = ["win_amd64"]
+# PEP 508 marker environment used to evaluate uv.lock markers.
+markers = { implementation_name = "cpython", implementation_version = "3.11.16", os_name = "nt", platform_machine = "AMD64", platform_python_implementation = "CPython", platform_release = "10", platform_system = "Windows", platform_version = "10.0.26200", python_full_version = "3.11.16", python_version = "3.11", sys_platform = "win32" }
+# Roots: the project's default dependencies (no optional extras; features
+# behind extras are outside the profile and refuse lazy installs), plus the
+# pyproject [build-system] requirements for the editable install with
+# --no-build-isolation.
+include_build_requires = true
+
+# Build requirements that upstream leaves unpinned and uv.lock does not cover.
+[[python.pins]]
+name = "wheel"
+version = "0.46.3"
+url = "https://files.pythonhosted.org/packages/87/22/b76d483683216dde3d67cba61fb2444be8d5be289bf628c13fc0fd90e5f9/wheel-0.46.3-py3-none-any.whl"
+sha256 = "4b399d56c9d9338230118d705d9737a2a468ccca63d5e813e2a4fc7815d8bc4d"
+reason = "pyproject [build-system] requires an unpinned `wheel`."
+
+# Packages the closure reaches that Phase 2 did not vendor. Each one is a
+# known deviation, listed so a refresh does not silently add or drop it.
+[[python.exclude]]
+name = "socksio"
+reason = "Reached through httpx[socks]; not vendored in Phase 2, so httpx has no SOCKS proxy support offline (gap G19). Remove this entry to vendor it."
+
+[node]
+vendor_dir = "vendor/node/windows-x64-desktop/tarballs"
+# Workspaces whose dependencies (including devDependencies: the desktop build
+# runs vite, esbuild and electron-builder) form the closure.
+roots = ["apps/desktop", "apps/shared"]
+include_peers = true
+os = "win32"
+cpu = "x64"
+
+# Bare imports in the root workspaces' source must resolve to a closure
+# package (`ohmaint.py check` scans them). These prefixes are path aliases
+# and workspace packages, not npm packages.
+import_aliases = ["@/", "@hermes/", "virtual:", "~"]
+import_scan_dirs = ["apps/desktop/src", "apps/desktop/electron", "apps/shared/src"]
+
+# Packages the desktop imports without declaring them (they resolve upstream
+# only through another workspace's hoisted install). Each needs a patch that
+# declares it for apps/desktop, so `npm ci --workspace apps/desktop` installs it.
+# [[node.extra_packages]]
+# name = "..."
+# reason = "..."
+
+[[node.exclude]]
+name = "@rolldown/binding-wasm32-wasi"
+reason = "WASI fallback for Rolldown's native binding; the win32-x64 binding is used, so this and its @emnapi dependencies are never loaded."
+
+# Packages with npm lifecycle scripts. The installer runs npm with
+# --ignore-scripts, so each one needs a reviewed plan. A closure package with
+# an install script that is not listed here fails `ohmaint.py check`.
+[[node.install_scripts]]
+name = "electron"
+handling = "Runtime materialized from vendor/browser (electron-v<version>-win32-x64.zip) by install-offline.ps1."
+[[node.install_scripts]]
+name = "esbuild"
+handling = "install-offline.ps1 runs esbuild's install.js, which links the vendored @esbuild/win32-x64 package without a download."
+[[node.install_scripts]]
+name = "get-windows"
+handling = "Native binding materialized from vendor/binaries (get-windows-<version>-napi-9-win32-unknown-x64.tar.gz)."
+[[node.install_scripts]]
+name = "node-pty"
+handling = "Script (node-gyp rebuild) skipped; the Windows build ships its conpty/winpty binaries in the tarball. Validated in Phase 4 with scripts disabled."
+[[node.install_scripts]]
+name = "unicode-animations"
+handling = "postinstall skipped; it only prints a message. Validated in Phase 4 with scripts disabled."
+[[node.install_scripts]]
+name = "electron-winstaller"
+handling = "install (7z arch selection) skipped; Squirrel installers are not built (electron-builder --dir)."
+
+# Vendored binaries whose version must follow an npm package in the closure.
+# match: equal (same version), prefix (artifact version starts with the npm
+# version), set (artifact versions equal the set of npm versions), reviewed
+# (the artifact was reviewed against npm_version; any other version needs a
+# manual review).
+[[pinned]]
+artifact = "electron"
+manifest = "browser.lock"
+npm_package = "electron"
+match = "equal"
+[[pinned]]
+artifact = "get-windows-native"
+manifest = "binaries.lock"
+npm_package = "get-windows"
+match = "prefix"
+[[pinned]]
+artifact = "lightningcss-source"
+manifest = "source.lock"
+npm_package = "lightningcss"
+match = "set"
+[[pinned]]
+artifact = "electron-builder-7zip"
+manifest = "binaries.lock"
+npm_package = "app-builder-lib"
+match = "reviewed"
+npm_version = "26.15.3"
+[[pinned]]
+artifact = "electron-builder-nsis"
+manifest = "binaries.lock"
+npm_package = "app-builder-lib"
+match = "reviewed"
+npm_version = "26.15.3"
+[[pinned]]
+artifact = "electron-builder-nsis-resources"
+manifest = "binaries.lock"
+npm_package = "app-builder-lib"
+match = "reviewed"
+npm_version = "26.15.3"
+[[pinned]]
+artifact = "electron-builder-wix"
+manifest = "binaries.lock"
+npm_package = "app-builder-lib"
+match = "reviewed"
+npm_version = "26.15.3"

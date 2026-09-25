@@ -20,9 +20,9 @@ Every dependency needed to install it ships in this repository as a pinned, chec
 | 3. Offline installer | Done, and run on native Windows 11 x64 under both Windows PowerShell 5.1 and PowerShell 7. See [`reports/phase-3-native-windows-run.md`](reports/phase-3-native-windows-run.md) |
 | 4. Network-blocked validation | Done on a clean Azure Windows 11 VM with outbound networking blocked: install, reinstall, rollback, CLI and desktop chats pass, with no public network attempt by Hermes. See [`reports/offline-install-test.md`](reports/offline-install-test.md), [`reports/offline-runtime-smoke-test.md`](reports/offline-runtime-smoke-test.md), [`reports/checksum-verification.md`](reports/checksum-verification.md) and the gaps in [`reports/final-gap-list.md`](reports/final-gap-list.md) |
 | 5. Distribution | Done. `scripts/build-bundle.ps1` builds a verified release archive of this repository. Install steps, prerequisites and exceptions are in [`RELEASE_NOTES.md`](RELEASE_NOTES.md); containers are deferred. See [`reports/phase-5-distribution.md`](reports/phase-5-distribution.md) |
-| 6. Upstream maintenance | Not started |
+| 6. Upstream maintenance | Done. `scripts/update-upstream.sh`, `diff-dependency-surface.sh` and `refresh-vendor-artifacts.sh` (online maintenance only), with selection rules in [`profiles/windows-x64-desktop.toml`](profiles/windows-x64-desktop.toml). See [`docs/upstream-update-workflow.md`](docs/upstream-update-workflow.md) and the two refresh simulations in [`reports/phase-6-update-simulation.md`](reports/phase-6-update-simulation.md) |
 
-Offline install and runtime are **validated for this profile** on Windows 11 x64 (Phase 4). Before any public release: Phase 6 (upstream update workflow) and the release gates in [`RELEASE_NOTES.md`](RELEASE_NOTES.md), chiefly the legal review (G11).
+Offline install and runtime are **validated for this profile** on Windows 11 x64 (Phase 4). All six phases have their deliverables. Before any public release, the release gates in [`RELEASE_NOTES.md`](RELEASE_NOTES.md) remain, chiefly the legal review (G11). Upstream has since moved to Python 3.14 and a new installer, so the next upstream update is porting work (G20).
 
 ## Getting the repository onto an offline machine
 
@@ -91,6 +91,7 @@ Features outside the profile report as unavailable instead of being downloaded. 
 ```bash
 bash tests/phase3/static-checks.sh    # installer invariants (needs ripgrep)
 bash tests/phase4/static-checks.sh    # harness invariants and PowerShell 5.1 compatibility
+bash tests/phase6/static-checks.sh    # maintenance tooling; the profile reproduces the manifests (needs Python 3.11+)
 ```
 
 For the Phase 4 network-blocked validation:
@@ -106,12 +107,15 @@ upstream/hermes-agent/  pristine upstream snapshot (tree hash pinned in manifest
 patches/                reviewed offline-profile patches, applied to the staged source at install (manifests/patches.lock)
 vendor/                 immutable artifacts: python/, node/, binaries/, browser/, source/ (Git LFS)
 manifests/              per-kind locks, licenses.lock, checksums.sha256 (the install-time source of truth)
-scripts/                verify-deps, install-offline, verify-offline, bootstrap, build-bundle, verify-release, uninstall-offline (.ps1, plus .sh shims)
+scripts/                verify-deps, install-offline, verify-offline, bootstrap, build-bundle, verify-release, uninstall-offline (.ps1, plus .sh shims);
+                        online maintenance: update-upstream, diff-dependency-surface, refresh-vendor-artifacts (.sh, scripts/maintenance/)
+profiles/               the rules that select the vendored Python and npm closures from upstream's lockfiles
 config/                 example Hermes, provider, Honcho and MCP configuration (no secrets)
-docs/                   install, configuration, and Phase 4 plan and runbook
-reports/                Phase 1 discovery, Phase 3 run results, and Phase 4 validation reports and gap list
+docs/                   install, configuration, Phase 4 plan and runbook, upstream update workflow
+reports/                Phase 1 discovery, Phase 3-6 results, gap list; upstream-updates/ holds surface diffs
 tests/phase3/           installer static checks
 tests/phase4/           network-blocked validation harness
+tests/phase6/           maintenance tooling checks
 ```
 
 The project's governing documents:

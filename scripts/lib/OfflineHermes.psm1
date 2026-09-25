@@ -82,6 +82,23 @@ function Get-ChecksumRecords {
     return $records
 }
 
+function Get-ManifestArtifactCount {
+    # artifact_count from a manifests/*.lock header. The installer compares
+    # the files it is about to install with it, so the expected counts follow
+    # a vendor refresh instead of being hard-coded.
+    param(
+        [Parameter(Mandatory)][string]$RepoRoot,
+        [Parameter(Mandatory)][string]$Manifest
+    )
+    $path = Join-Path $RepoRoot "manifests\$Manifest"
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing manifest: manifests/$Manifest" }
+    foreach ($line in [IO.File]::ReadLines($path)) {
+        if ($line -match '^artifact_count = (\d+)$') { return [int]$Matches[1] }
+        if ($line -eq '[[artifact]]') { break }
+    }
+    throw "manifests/$Manifest has no artifact_count."
+}
+
 function Test-VendoredArtifacts {
     param(
         [Parameter()][string]$RepoRoot = (Get-OfflineHermesRepoRoot),
@@ -413,6 +430,7 @@ Export-ModuleMember -Function @(
     'Get-ChecksumRecords',
     'Get-FileSha256',
     'Get-LongPath',
+    'Get-ManifestArtifactCount',
     'Get-ReleaseTreeFiles',
     'Get-UpstreamPatchRecords',
     'Install-UpstreamPatches',

@@ -34,8 +34,9 @@ function Install-NodeClosure {
 
     $tarballRoot = Join-Path $RepoRoot 'vendor\node\windows-x64-desktop\tarballs'
     $tarballs = @(Get-ChildItem -LiteralPath $tarballRoot -Filter '*.tgz' -File | Sort-Object Name)
-    if ($tarballs.Count -ne 1027) {
-        throw "Expected 1027 npm tarballs but found $($tarballs.Count) in $tarballRoot."
+    $expectedTarballs = Get-ManifestArtifactCount -RepoRoot $RepoRoot -Manifest 'node.lock'
+    if ($tarballs.Count -ne $expectedTarballs) {
+        throw "Expected $expectedTarballs npm tarballs (manifests/node.lock) but found $($tarballs.Count) in $tarballRoot."
     }
 
     Write-Host "Priming the isolated npm cache from $($tarballs.Count) local tarballs..."
@@ -341,7 +342,10 @@ try {
 
     $wheelRoot = Join-Path $repoRoot 'vendor\python\windows-x64-cp311'
     $wheels = @(Get-ChildItem -LiteralPath $wheelRoot -Filter '*.whl' -File | Sort-Object Name)
-    if ($wheels.Count -ne 68) { throw "Expected 68 Python wheels but found $($wheels.Count)." }
+    $expectedWheels = Get-ManifestArtifactCount -RepoRoot $repoRoot -Manifest 'python.lock'
+    if ($wheels.Count -ne $expectedWheels) {
+        throw "Expected $expectedWheels Python wheels (manifests/python.lock) but found $($wheels.Count) in $wheelRoot."
+    }
 
     Install-NodeClosure -RepoRoot $repoRoot -SourceRoot $sourceRoot -NodeRoot (Join-Path $runtimeRoot 'node') -WorkRoot $workRoot
 
