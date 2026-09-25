@@ -20,6 +20,14 @@ The installer verifies every vendored byte before mutation, extracts the pinned 
 
 Launch with `launch-hermes.cmd`; run the CLI with `hermes-offline.cmd`. Both launchers pin `HERMES_HOME` and force lazy dependency installation, pip indexes, and uv networking off.
 
+## From a release archive
+
+A release (`scripts\build-bundle.ps1`, Phase 5) is this repository's committed tree in a zip, plus `RELEASE-MANIFEST.json`, a generated `THIRD-PARTY-NOTICES.md` and `release-files.sha256`. Extract it with `tar.exe -xf` into a short path, then run `.\scripts\verify-release.ps1` before the steps above. When `RELEASE-MANIFEST.json` is present, `install-offline.ps1` checks the whole release tree (scripts, patches, upstream source) as well as the vendored artifacts, and records the release version in `install-state.json`. See [`RELEASE_NOTES.md`](../RELEASE_NOTES.md).
+
+## Uninstall
+
+`.\scripts\uninstall-offline.ps1` removes the install root and keeps the Hermes home. `-RemoveHermesHome` also removes the home, and `-RemoveBackups` removes the `-Force` backups and any leftover staging folders. `-WhatIf` lists what would be removed. It refuses a folder without a `windows-x64-desktop` `install-state.json`, refuses protected folders (drive roots, the user profile, `%LOCALAPPDATA%`, the repository), and refuses while any process runs from the install or the home. `%LOCALAPPDATA%\hermes` and `%APPDATA%\Hermes` are reported, never removed.
+
 ## Upstream patches
 
 `upstream/hermes-agent` is kept byte-identical to the pinned commit. Where upstream behavior conflicts with offline operation and cannot be wrapped from outside, a reviewed patch in `patches/` is applied to the installer's **staged copy** of the source before anything is built. Each patch is listed with its SHA-256, target and reason in `manifests/patches.lock`. The installer checks each patch's hash and then runs `git apply --check` with the bundled Git. A patch that no longer applies (for example after an upstream refresh) stops the install with a message naming it.

@@ -19,10 +19,10 @@ Every dependency needed to install it ships in this repository as a pinned, chec
 | 2. Vendoring | Done. Artifacts in `vendor/`, manifests in `manifests/` |
 | 3. Offline installer | Done, and run on native Windows 11 x64 under both Windows PowerShell 5.1 and PowerShell 7. See [`reports/phase-3-native-windows-run.md`](reports/phase-3-native-windows-run.md) |
 | 4. Network-blocked validation | Done on a clean Azure Windows 11 VM with outbound networking blocked: install, reinstall, rollback, CLI and desktop chats pass, with no public network attempt by Hermes. See [`reports/offline-install-test.md`](reports/offline-install-test.md), [`reports/offline-runtime-smoke-test.md`](reports/offline-runtime-smoke-test.md), [`reports/checksum-verification.md`](reports/checksum-verification.md) and the gaps in [`reports/final-gap-list.md`](reports/final-gap-list.md) |
-| 5. Distribution | Not started |
+| 5. Distribution | Done. `scripts/build-bundle.ps1` builds a verified release archive of this repository. Install steps, prerequisites and exceptions are in [`RELEASE_NOTES.md`](RELEASE_NOTES.md); containers are deferred. See [`reports/phase-5-distribution.md`](reports/phase-5-distribution.md) |
 | 6. Upstream maintenance | Not started |
 
-Offline install and runtime are **validated for this profile** on Windows 11 x64 (Phase 4). Before any release: Phase 5 (distribution) and Phase 6 (upstream update workflow), plus the release-blocking gaps G7 and G11 in the gap list.
+Offline install and runtime are **validated for this profile** on Windows 11 x64 (Phase 4). Before any public release: Phase 6 (upstream update workflow) and the release gates in [`RELEASE_NOTES.md`](RELEASE_NOTES.md), chiefly the legal review (G11).
 
 ## Getting the repository onto an offline machine
 
@@ -37,7 +37,13 @@ powershell -ExecutionPolicy Bypass -File .\scripts\verify-deps.ps1   # must repo
 
 If `verify-deps` reports checksum mismatches, the LFS content was not downloaded (the files are still pointer stubs). Run `git lfs pull` again.
 
-Then copy the working tree to the offline machine. `.git` is not needed there. `tests\phase4\New-Phase4Vm.ps1 -Stage Export` produces a verified tar of exactly the files required.
+Then build a release archive and take it to the offline machine:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build-bundle.ps1   # dist\OfflineHermes-<version>-windows-x64-desktop.zip and .sha256
+```
+
+On the offline machine, extract it with `tar.exe -xf` and run `.\scripts\verify-release.ps1`. The full procedure is in [`RELEASE_NOTES.md`](RELEASE_NOTES.md). Copying the working tree without `.git` also works.
 
 ## Install
 
@@ -60,6 +66,8 @@ Launch with `launch-hermes.cmd` (desktop) or `hermes-offline.cmd` (CLI) from the
 
 Hermes still needs an inference provider: a local or LAN OpenAI-compatible server such as vLLM, llama.cpp or Ollama. Before the first desktop launch, run `.\scripts\configure-provider.ps1 -BaseUrl http://<server>:8000/v1 -Model <model-id>`. It saves the provider and checks the server on the local network; the model needs a context window of at least 64K tokens. See [`docs/configuration.md`](docs/configuration.md). Options, failure behavior and profile limits are in [`docs/offline-install.md`](docs/offline-install.md).
 
+To remove Offline Hermes, run `.\scripts\uninstall-offline.ps1` (add `-WhatIf` to preview). It keeps your Hermes home unless you pass `-RemoveHermesHome`.
+
 ## Not included
 
 These are out of the first profile:
@@ -76,7 +84,6 @@ Features outside the profile report as unavailable instead of being downloaded. 
 ## Known issues
 
 - **Opening `app\Hermes.exe` directly** now behaves like `launch-hermes.cmd` (patch 0002): offline home, offline backend, and its own Electron user data, so it can run alongside an online Hermes Desktop. The in-app installer and *Repair install* never download; a broken install is repaired with `scripts\install-offline.ps1 -Force`.
-- **`scripts\build-bundle.ps1`** zips an installed tree whose paths are fixed to a temporary folder, so the archive does not work anywhere else yet. A Phase 5 fix.
 - **Redistribution:** a human legal review is required before public redistribution; see [`reports/license-redistribution-review.md`](reports/license-redistribution-review.md) and the policy in [`manifests/licenses.lock`](manifests/licenses.lock).
 
 ## Testing
@@ -99,7 +106,7 @@ upstream/hermes-agent/  pristine upstream snapshot (tree hash pinned in manifest
 patches/                reviewed offline-profile patches, applied to the staged source at install (manifests/patches.lock)
 vendor/                 immutable artifacts: python/, node/, binaries/, browser/, source/ (Git LFS)
 manifests/              per-kind locks, licenses.lock, checksums.sha256 (the install-time source of truth)
-scripts/                verify-deps, install-offline, verify-offline, bootstrap, build-bundle (.ps1, plus .sh shims)
+scripts/                verify-deps, install-offline, verify-offline, bootstrap, build-bundle, verify-release, uninstall-offline (.ps1, plus .sh shims)
 config/                 example Hermes, provider, Honcho and MCP configuration (no secrets)
 docs/                   install, configuration, and Phase 4 plan and runbook
 reports/                Phase 1 discovery, Phase 3 run results, and Phase 4 validation reports and gap list

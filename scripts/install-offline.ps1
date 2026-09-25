@@ -217,8 +217,13 @@ set "PATH=%OFFLINE_HERMES_ROOT%runtime\node;%OFFLINE_HERMES_ROOT%runtime\git\cmd
     $cli = $cli.Replace('__HOME_LINE__', $homeLine).Replace("`r`n", "`n").Replace("`n", "`r`n")
     [IO.File]::WriteAllText((Join-Path $InstallRoot 'hermes-offline.cmd'), $cli, [Text.UTF8Encoding]::new($false))
 
+    $releaseManifest = Join-Path (Get-OfflineHermesRepoRoot) 'RELEASE-MANIFEST.json'
+    $releaseVersion = if (Test-Path -LiteralPath $releaseManifest -PathType Leaf) {
+        ([IO.File]::ReadAllText($releaseManifest) | ConvertFrom-Json).release_version
+    } else { $null }
     $state = [ordered]@{
         profile = 'windows-x64-desktop'
+        release_version = $releaseVersion
         installed_at = [DateTime]::UtcNow.ToString('o')
         hermes_home = $HermesHome
         desktop_built = $HasDesktop
@@ -251,6 +256,11 @@ try {
         throw "HermesHome must be outside the replaceable install root: $hermesHomePath"
     }
     Test-VendoredArtifacts -RepoRoot $repoRoot | Out-Null
+    # From an extracted release archive, also check the scripts, patches and
+    # upstream source, so a partial extraction stops here.
+    if (Test-Path -LiteralPath (Join-Path $repoRoot 'RELEASE-MANIFEST.json') -PathType Leaf) {
+        Test-ReleaseTree -ReleaseRoot $repoRoot | Out-Null
+    }
 
     if (Test-Path -LiteralPath $installPath) {
         if (-not $Force) {

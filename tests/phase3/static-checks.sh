@@ -31,7 +31,12 @@ required=(
   scripts/verify-offline.ps1
   scripts/build-bundle.ps1
   scripts/configure-provider.ps1
+  scripts/verify-release.ps1
+  scripts/verify-release.sh
+  scripts/uninstall-offline.ps1
+  scripts/uninstall-offline.sh
   scripts/lib/OfflineHermes.psm1
+  RELEASE_NOTES.md
   config/env.example
   config/hermes.example.yaml
   config/honcho.example.yaml
@@ -109,5 +114,24 @@ for patch in "$repo_root"/patches/*.patch; do
   rel="${patch#$repo_root/}"
   grep -q "path = \"$rel\"" "$lock" || { echo "Unlisted patch file: $rel" >&2; exit 1; }
 done
+
+# Phase 5 release archive: the committed tree (never an installed tree, whose
+# venv embeds its build path), verified before and after archiving.
+require 'ls-files' "$repo_root/scripts/build-bundle.ps1"
+require 'Test-VendoredArtifacts' "$repo_root/scripts/build-bundle.ps1"
+require 'Test-ReleaseTree' "$repo_root/scripts/build-bundle.ps1"
+require 'THIRD-PARTY-NOTICES.md' "$repo_root/scripts/build-bundle.ps1"
+if rg -n 'install-offline\.ps1.*-InstallRoot|Compress-Archive' "$repo_root/scripts/build-bundle.ps1"; then
+  echo 'build-bundle.ps1 must archive the repository tree, not an installed tree, and must not use Compress-Archive.' >&2
+  exit 1
+fi
+require 'Test-ReleaseTree' "$repo_root/scripts/install-offline.ps1"
+# Uninstall: only removes identified installs, never online Hermes folders.
+require 'install-state.json' "$repo_root/scripts/uninstall-offline.ps1"
+require 'SupportsShouldProcess' "$repo_root/scripts/uninstall-offline.ps1"
+if rg -n "Remove-Tree -Path \(Join-Path \\\$env:(LOCALAPPDATA|APPDATA) '[Hh]ermes'\)" "$repo_root/scripts/uninstall-offline.ps1"; then
+  echo 'uninstall-offline.ps1 must not remove %LOCALAPPDATA%\hermes or %APPDATA%\Hermes.' >&2
+  exit 1
+fi
 
 echo 'Phase 3 static checks passed.'

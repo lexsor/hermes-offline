@@ -293,6 +293,111 @@ function Install-UpstreamPatches {
     return $records.Count
 }
 
+function Get-LongPath {
+    # Upstream's documentation tree has paths near MAX_PATH; under Windows
+    # PowerShell 5.1 without LongPathsEnabled, plain paths fail beyond 260
+    # characters. The \\?\ form works in both 5.1 (.NET 4.6.2+) and 7.
+    param([Parameter(Mandatory)][string]$Path)
+    $full = [IO.Path]::GetFullPath($Path)
+    if ($full.StartsWith('\\?\')) { return $full }
+    if ($full.StartsWith('\\')) { return '\\?\UNC\' + $full.Substring(2) }
+    return '\\?\' + $full
+}
+
+function Get-FileSha256 {
+    param([Parameter(Mandatory)][string]$Path)
+    $stream = [IO.File]::OpenRead((Get-LongPath $Path))
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+        return ([BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-', '').ToLowerInvariant()
+    }
+    finally {
+        $sha.Dispose()
+        $stream.Dispose()
+    }
+}
+
+function Get-ReleaseTreeFiles {
+    # Relative paths (with /) of every file under $Root, ordinal-sorted.
+    param([Parameter(Mandatory)][string]$Root)
+    $longRoot = (Get-LongPath $Root).TrimEnd('\') + '\'
+    $files = [System.Collections.Generic.List[string]]::new()
+    foreach ($file in [IO.Directory]::EnumerateFiles($longRoot, '*', [IO.SearchOption]::AllDirectories)) {
+        $files.Add($file.Substring($longRoot.Length).Replace('\', '/'))
+    }
+    $array = $files.ToArray()
+    [Array]::Sort($array, [StringComparer]::Ordinal)
+    return , $array
+}
+
+function Test-ReleaseTree {
+    # Verifies an extracted release archive against its release-files.sha256:
+    # every listed file present with the recorded hash, and nothing unlisted.
+    # This detects partial or damaged extraction (for example a tool that
+    # skipped long paths); it is not a signature and does not authenticate
+    # the publisher. Check the archive's .sha256 against a trusted copy.
+    param(
+        [Parameter(Mandatory)][string]$ReleaseRoot,
+        [Parameter()][switch]$Quiet
+    )
+
+    $listPath = Join-Path $ReleaseRoot 'release-files.sha256'
+    $manifestPath = Join-Path $ReleaseRoot 'RELEASE-MANIFEST.json'
+    foreach ($required in $listPath, $manifestPath) {
+        if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
+            throw "Not an extracted release archive: missing $required`nA Git clone has no release file list; verify it with scripts\verify-deps.ps1."
+        }
+    }
+    $manifest = [IO.File]::ReadAllText($manifestPath) | ConvertFrom-Json
+
+    $expected = [System.Collections.Generic.Dictionary[string, string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $lineNumber = 0
+    foreach ($line in [IO.File]::ReadLines($listPath)) {
+        $lineNumber++
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        if ($line -notmatch '^([0-9a-f]{64})  (.+)$') {
+            throw "Malformed entry at release-files.sha256:$lineNumber"
+        }
+        $expected[$Matches[2]] = $Matches[1]
+    }
+    if ($expected.Count -ne [int]$manifest.release_files) {
+        throw "release-files.sha256 lists $($expected.Count) files but RELEASE-MANIFEST.json records $($manifest.release_files)."
+    }
+
+    $missing = [System.Collections.Generic.List[string]]::new()
+    $mismatched = [System.Collections.Generic.List[string]]::new()
+    foreach ($entry in $expected.GetEnumerator()) {
+        $path = Join-Path $ReleaseRoot $entry.Key.Replace('/', '\')
+        if (-not [IO.File]::Exists((Get-LongPath $path))) { $missing.Add($entry.Key); continue }
+        if ((Get-FileSha256 $path) -ne $entry.Value) { $mismatched.Add($entry.Key) }
+    }
+    $present = Get-ReleaseTreeFiles -Root $ReleaseRoot
+    $unlisted = @($present | Where-Object {
+        $_ -ne 'release-files.sha256' -and -not $expected.ContainsKey($_)
+    })
+
+    if ($missing.Count -or $mismatched.Count -or $unlisted.Count) {
+        $report = @("Release tree verification failed for $ReleaseRoot")
+        foreach ($group in @(
+            @{ Label = 'Missing'; Items = @($missing) },
+            @{ Label = 'Checksum mismatch'; Items = @($mismatched) },
+            @{ Label = 'Not in the release'; Items = $unlisted }
+        )) {
+            if ($group.Items.Count -eq 0) { continue }
+            $report += "$($group.Label) ($($group.Items.Count)):"
+            $report += @($group.Items | Select-Object -First 20 | ForEach-Object { "  $_" })
+            if ($group.Items.Count -gt 20) { $report += "  ... and $($group.Items.Count - 20) more" }
+        }
+        $report += 'Re-extract the archive with: tar.exe -xf <archive>.zip (File Explorer can skip long paths).'
+        throw ($report -join "`n")
+    }
+
+    if (-not $Quiet) {
+        Write-Host "Verified $($expected.Count) release files against release-files.sha256 (release $($manifest.release_version))."
+    }
+    return $manifest
+}
+
 function Write-OfflineHermesFailure {
     # Print the failure message verbatim on stderr. Write-Error under Windows
     # PowerShell 5.1 prefixes the script path and wraps at the console width,
@@ -306,6 +411,9 @@ Export-ModuleMember -Function @(
     'Copy-DirectoryContents',
     'Expand-ZipClean',
     'Get-ChecksumRecords',
+    'Get-FileSha256',
+    'Get-LongPath',
+    'Get-ReleaseTreeFiles',
     'Get-UpstreamPatchRecords',
     'Install-UpstreamPatches',
     'Get-OfflineHermesRepoRoot',
@@ -313,6 +421,7 @@ Export-ModuleMember -Function @(
     'Invoke-CheckedCommand',
     'Invoke-WithEnvironment',
     'Resolve-NodePackageDirectory',
+    'Test-ReleaseTree',
     'Test-VendoredArtifacts',
     'Write-OfflineHermesFailure'
 )
