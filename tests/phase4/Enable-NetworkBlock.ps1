@@ -128,6 +128,10 @@ if ($dnsLogConfig -notmatch 'enabled:\s*true' -or $dnsLogConfig -notmatch 'maxSi
 }
 & wevtutil.exe cl 'Microsoft-Windows-DNS-Client/Operational' | Out-Null
 & ipconfig.exe /flushdns | Out-Null
+# Evidence coverage is measured from here: the DNS log was just cleared, so
+# it cannot contain events from the few seconds before (enabled_at).
+$state.evidence_logs_started_local = [DateTime]::Now.ToString('o')
+Write-EvidenceJson -Path $statePath -InputObject $state
 
 Write-Host "Outbound network blocked. State: $statePath"
 Write-Host "Disabled $($state.disabled_allow_rules.Count) outbound allow rules; removed $($state.removed_routes.Count) default routes."

@@ -26,6 +26,7 @@ Import-Module (Join-Path $PSScriptRoot 'Phase4.psm1') -Force
 $invariant = [Globalization.CultureInfo]::InvariantCulture
 New-Item -ItemType Directory -Path $EvidenceDirectory -Force | Out-Null
 
+$state = $null
 if (-not $Since) {
     $statePath = Join-Path $StateDirectory 'state.json'
     if (-not (Test-Path -LiteralPath $statePath)) {
@@ -138,6 +139,12 @@ function Resolve-CaseId {
 # clears the DNS log right after recording enabled_at, so requiring coverage
 # from enabled_at itself would always report a spurious gap of a few seconds.
 $requiredFrom = $Since
+# Without a case timeline, coverage starts when Enable-NetworkBlock.ps1 cleared
+# the logs (recorded since the Azure recheck; older state files lack it).
+if ($caseWindows.Count -eq 0 -and $state -and $state.PSObject.Properties['evidence_logs_started_local']) {
+    $logsStarted = [datetime]::Parse($state.evidence_logs_started_local, $invariant)
+    if ($logsStarted -gt $requiredFrom) { $requiredFrom = $logsStarted }
+}
 if ($caseWindows.Count -gt 0) {
     $firstCase = ($caseWindows | Sort-Object start | Select-Object -First 1).start
     if ($firstCase -gt $requiredFrom) { $requiredFrom = $firstCase }

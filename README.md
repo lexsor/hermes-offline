@@ -22,7 +22,7 @@ Every dependency needed to install it ships in this repository as a pinned, chec
 | 5. Distribution | Not started |
 | 6. Upstream maintenance | Not started |
 
-Offline install and runtime are **validated for this profile** on Windows 11 x64 (Phase 4). Before any release: Phase 5 (distribution) and Phase 6 (upstream update workflow), plus the release-blocking gaps G7 and G11 in the gap list (G1/G2 are fixed pending a VM re-check).
+Offline install and runtime are **validated for this profile** on Windows 11 x64 (Phase 4). Before any release: Phase 5 (distribution) and Phase 6 (upstream update workflow), plus the release-blocking gaps G7 and G11 and a decision on G18 in the gap list.
 
 ## Getting the repository onto an offline machine
 
