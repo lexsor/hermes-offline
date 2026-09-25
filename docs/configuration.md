@@ -18,3 +18,19 @@ models_dev:
 ```
 
 `models.dev` has no on/off switch, only a mirror URL. A closed loopback port makes the fetch fail at once, without any DNS lookup, and Hermes falls back to cached or built-in model data. As a result, offline the desktop shows no per-provider model lists or registry metadata; set the model name and `context_length` for local models explicitly. New installs seed both settings. The installer warns if an existing `config.yaml` lacks them, and `scripts/verify-offline.ps1` fails until they are present.
+
+## Point Hermes at your model server
+
+The offline build needs an inference provider on your own network: any OpenAI-compatible server, for example vLLM, llama.cpp `server`, Ollama or NVIDIA NIM on a GPU machine. Configure it **before the first desktop launch**. Without a provider, the desktop opens on upstream's setup screen, whose options (Nous Portal, "download a model", cloud API keys) all need the Internet, and whose checks try to reach `inference-api.nousresearch.com` and `openrouter.ai` (gap G18).
+
+```powershell
+.\scripts\configure-provider.ps1 -BaseUrl http://<server>:8000/v1 -Model <model-id>
+```
+
+- It writes `model.provider: custom`, `model.base_url` and `model.default` through the installed Hermes (`hermes config set`), then calls `GET <BaseUrl>/models` on the local network. It confirms the server answers and lists `<model-id>`, and reports the context window the server advertises.
+- **Context window:** Hermes Agent refuses models with less than **64,000 tokens** of context. Serve the model with at least that (vLLM `--max-model-len 65536` or more; llama.cpp `-c 65536`; Ollama `OLLAMA_CONTEXT_LENGTH=65536`). Pass `-ContextLength <n>` if the server does not advertise its window; with models.dev disabled offline, Hermes otherwise relies on the server.
+- **API key:** for a server that requires one, pass `-ApiKeyEnv <NAME>` and put `<NAME>=<key>` in `<offline home>\.env`. The script never writes the key itself. No-auth servers need nothing; Hermes sends a placeholder.
+- Rerunning it with new values updates the provider. `-SkipCheck` saves without contacting the server.
+- `-Model` must be the exact id from the server's `/v1/models` list. For vLLM that is the `--served-model-name`, or the model path if none was given.
+
+For a GPU box on the LAN, the base URL is its address and port, for example `http://192.168.1.50:8000/v1`. A public IP address produces a warning, because an offline deployment should not need one.

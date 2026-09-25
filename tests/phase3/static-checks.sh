@@ -30,6 +30,7 @@ required=(
   scripts/verify-deps.ps1
   scripts/verify-offline.ps1
   scripts/build-bundle.ps1
+  scripts/configure-provider.ps1
   scripts/lib/OfflineHermes.psm1
   config/env.example
   config/hermes.example.yaml
@@ -82,6 +83,10 @@ for f in scripts/install-offline.ps1 config/hermes.example.yaml tests/phase4/Sta
   require '127\.0\.0\.1:9/offline-hermes-models-dev-disabled' "$repo_root/$f"
 done
 require 'model_catalog.enabled is not false' "$repo_root/scripts/verify-offline.ps1"
+# Provider setup: never stores the key; enforces Hermes's 64K minimum context.
+require 'config set' "$repo_root/scripts/configure-provider.ps1"
+require 'minimumContext = 64000' "$repo_root/scripts/configure-provider.ps1"
+require 'configure-provider.ps1' "$repo_root/scripts/install-offline.ps1"
 
 # Upstream patches: every entry in manifests/patches.lock exists with the
 # recorded hash, and the installer applies them to the staged source.

@@ -370,6 +370,15 @@ try {
     Write-Host "Offline Hermes installation completed: $installPath"
     Write-Host "CLI launcher:     $installPath\hermes-offline.cmd"
     if ($hasDesktop) { Write-Host "Desktop launcher: $installPath\launch-hermes.cmd" }
+
+    # Without a provider the desktop opens on its cloud-provider setup screen,
+    # which offers only options that need the Internet (Phase 4 gap G18).
+    $homeConfig = [IO.File]::ReadAllText((Join-Path $hermesHomePath 'config.yaml'))
+    if ($homeConfig -notmatch '(?m)^\s+base_url:\s*\S') {
+        Write-Host ''
+        Write-Host 'Next: point Hermes at your local or LAN model server (OpenAI-compatible API), for example:'
+        Write-Host "  .\scripts\configure-provider.ps1 -BaseUrl http://<server>:8000/v1 -Model <model-id> -InstallRoot `"$installPath`""
+    }
 }
 catch {
     if (Test-Path -LiteralPath $stageRoot) {

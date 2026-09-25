@@ -22,7 +22,7 @@ Every dependency needed to install it ships in this repository as a pinned, chec
 | 5. Distribution | Not started |
 | 6. Upstream maintenance | Not started |
 
-Offline install and runtime are **validated for this profile** on Windows 11 x64 (Phase 4). Before any release: Phase 5 (distribution) and Phase 6 (upstream update workflow), plus the release-blocking gaps G7 and G11 and a decision on G18 in the gap list.
+Offline install and runtime are **validated for this profile** on Windows 11 x64 (Phase 4). Before any release: Phase 5 (distribution) and Phase 6 (upstream update workflow), plus the release-blocking gaps G7 and G11 in the gap list.
 
 ## Getting the repository onto an offline machine
 
@@ -58,7 +58,7 @@ The install takes about 15–20 minutes. Most of that is the local Electron desk
 
 Launch with `launch-hermes.cmd` (desktop) or `hermes-offline.cmd` (CLI) from the install folder. Always use these launchers. They pin the offline Hermes home and runtimes, and keep lazy installs and update checks off.
 
-Hermes still needs an inference provider. Point it at a local or LAN OpenAI-compatible server using the examples in [`config/`](config/); see [`docs/configuration.md`](docs/configuration.md). Options, failure behavior and profile limits are in [`docs/offline-install.md`](docs/offline-install.md).
+Hermes still needs an inference provider: a local or LAN OpenAI-compatible server such as vLLM, llama.cpp or Ollama. Before the first desktop launch, run `.\scripts\configure-provider.ps1 -BaseUrl http://<server>:8000/v1 -Model <model-id>`. It saves the provider and checks the server on the local network; the model needs a context window of at least 64K tokens. See [`docs/configuration.md`](docs/configuration.md). Options, failure behavior and profile limits are in [`docs/offline-install.md`](docs/offline-install.md).
 
 ## Not included
 
